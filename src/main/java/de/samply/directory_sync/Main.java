@@ -19,13 +19,16 @@ public class Main {
         Parameters inParams = new Parameters();
         inParams.addParameter().setName("periodStart").setValue(new DateType("1900"));
         inParams.addParameter().setName("periodEnd").setValue(new DateType("2100"));
+        //TODO add Measure canonicalUrl as Parameter
 
     // Invoke $everything on "Patient/1"
         Parameters outParams = client
                 .operation()
                 .onInstance(new IdDt("Measure", "5ddac8ad-371c-4e25-924d-46281964b348"))
+                //TODO use onType istead of onInstance
                 .named("$evaluate-measure")
                 .withParameters(inParams)
+                .useHttpGet()
                 .execute();
 
         /*
@@ -37,6 +40,6 @@ public class Main {
         MeasureReport response = (MeasureReport) outParams.getParameter().get(0).getResource();
 
 // Print the response bundle
-        System.out.println(ctx.newXmlParser().setPrettyPrint(true).encodeResourceToString(response));
+        System.out.println(ctx.newJsonParser().setPrettyPrint(true).encodeResourceToString(response));
     }
 }
