@@ -1,6 +1,7 @@
 # directory-sync
-| Anfrage | Subject | Stratifier | Scoring
-|--|--|--|
+
+| Anfrage | Subject | Stratifier | Scoring |
+|---------|---------|------------|---------|
 | order_of_magnitude | Specimen | Collection | cohort |
 | order_of_magnitude_donors | Patient | Collection | cohort |
 | size |  Specimen | Collection | cohort |
