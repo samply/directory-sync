@@ -5,33 +5,29 @@ import ca.uhn.fhir.model.primitive.IdDt;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
-import org.hl7.fhir.r4.model.DateType;
-import org.hl7.fhir.r4.model.MeasureReport;
-import org.hl7.fhir.r4.model.Parameters;
+import org.hl7.fhir.instance.model.api.IIdType;
+import org.hl7.fhir.r4.model.*;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class Main {
 
 
+    public static final Function<Resource, String> GET_ID_PART = ((Function<IdType, String>) IdType::getIdPart).compose(Resource::getIdElement);
+
     public static void main(String[] args) throws IOException {
-        //System.out.println(getBlaze());
-        System.out.println(getDirectory());
+        getBlaze();
+        // System.out.println(getDirectory());
     }
 
 
@@ -47,6 +43,7 @@ public class Main {
         CloseableHttpClient client = HttpClients.createDefault();
         HttpPost httpPost = new HttpPost("http://localhost:8081/api/v1/login");
 
+        //TODO Build via Object and Gson
         String json = "{\n" +
                 "  \"username\": \"admin\",\n" +
                 "  \"password\": \"admin\"\n" +
@@ -62,7 +59,7 @@ public class Main {
         LoginResponse loginResponse = gson.fromJson(body, LoginResponse.class);
         String token = loginResponse.token;
 
-        HttpGet httpGet = new HttpGet("http://localhost:8081/api/v2/sys_md_EntityType");
+        HttpGet httpGet = new HttpGet("http://localhost:8081/api/v2/eu_bbmri_eric_collections");
         httpGet.setHeader("x-molgenis-token", token);
         httpGet.setHeader("Accept", "application/json");
         httpGet.setHeader("Content-type", "application/json");
@@ -75,38 +72,99 @@ public class Main {
     }
 
 
-    static String getBlaze() {
+    static void getBlaze() {
 
-        // Create a client to talk to the HeathIntersections server
+        // Create a client
         FhirContext ctx = FhirContext.forR4();
         IGenericClient client = ctx.newRestfulGenericClient("https://blaze.life.uni-leipzig.de/fhir");
         client.registerInterceptor(new LoggingInterceptor(true));
+        MeasureReport report = getMeasureReport(client, "5df2282b-9c51-4be9-88c9-dd9ddbe1024f");
 
+
+        Map<String, Integer> counts = extractStratifierCounts(report);
+
+        Map<String, Organization> collections = fetchCollections(client, counts.keySet());
+
+        Map<String, Integer> bbmriCounts = mergeById(counts, collections);
+
+        System.out.println("bbmriCounts = " + bbmriCounts);
+
+        /*// Print the response bundle
+        return (ctx.newJsonParser().setPrettyPrint(true).encodeResourceToString(response));*/
+    }
+
+
+
+    private static Map<String, Organization> fetchCollections(IGenericClient client, Collection<String> ids) {
+        Bundle response = (Bundle) client.search().forResource(Organization.class).where(Organization.RES_ID.exactly().codes(ids)).execute();
+
+        return response.getEntry().stream()
+                .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
+                .map(e -> (Organization) e.getResource())
+                .collect(Collectors.toMap(GET_ID_PART, Function.identity()));
+    }
+
+    private static Map<String, Integer> extractStratifierCounts(MeasureReport report) {
+        Map<String, Integer> counts = new HashMap<>();
+
+        for (MeasureReport.StratifierGroupComponent stratum : report.getGroupFirstRep().getStratifierFirstRep().getStratum()) {
+
+            String reference = stratum.getValue().getText();
+            String[] referenceParts = reference.split("/");
+            if (referenceParts.length == 2) {
+                counts.put(referenceParts[1], stratum.getPopulationFirstRep().getCount());
+            } else {
+                throw new IllegalArgumentException(String.format("Invalid collection reference `%s`", reference));
+            }
+
+        }
+        return counts;
+    }
+
+    private static MeasureReport getMeasureReport(IGenericClient client, String id) {
         // Create the input parameters to pass to the server
         Parameters inParams = new Parameters();
         inParams.addParameter().setName("periodStart").setValue(new DateType("1900"));
         inParams.addParameter().setName("periodEnd").setValue(new DateType("2100"));
         //TODO add Measure canonicalUrl as Parameter
 
-        // Invoke $everything on "Patient/1"
+
         Parameters outParams = client
                 .operation()
-                .onInstance(new IdDt("Measure", "5ddac8ad-371c-4e25-924d-46281964b348"))
-                //TODO use onType istead of onInstance
+                .onInstance(new IdDt("Measure", id))
+                //TODO use onType instead of onInstance
                 .named("$evaluate-measure")
                 .withParameters(inParams)
                 .useHttpGet()
                 .execute();
 
-        /*
-         * Note that the $everything operation returns a Bundle instead
-         * of a Parameters resource. The client operation methods return a
-         * Parameters instance however, so HAPI creates a Parameters object
-         * with a single parameter containing the value.
-         */
-        MeasureReport response = (MeasureReport) outParams.getParameter().get(0).getResource();
 
-        // Print the response bundle
-        return (ctx.newJsonParser().setPrettyPrint(true).encodeResourceToString(response));
+        return (MeasureReport) outParams.getParameter().get(0).getResource();
     }
+
+    private static Map<String, Integer> mergeById(Map<String, Integer> counts, Map<String, Organization> collections) {
+        Map<String, Integer> bbmriCounts = new HashMap<>();
+
+        for (Map.Entry<String, Organization> collectionEntry : collections.entrySet()) {
+
+            Organization collection = collectionEntry.getValue();
+
+            for (Identifier identifier : collection.getIdentifier()) {
+                if ("http://www.bbmri-eric.eu/".equals(identifier.getSystem())) {
+                    String bbmriId = identifier.getValue();
+                    if(bbmriId != null){
+                        Integer count = counts.get(collectionEntry.getKey());
+                        if(count != null){
+                            bbmriCounts.put(bbmriId, count);
+                        }
+
+                    }
+
+                }
+            }
+
+        }
+        return bbmriCounts;
+    }
+
 }
