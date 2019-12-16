@@ -23,7 +23,7 @@ class MainTest {
         identifier.setSystem("http://www.bbmri-eric.eu/").setValue("test");
         testOrg.add((Organization) new Organization().addIdentifier(identifier).setId("1"));
 
-        Map<String, Integer> res = Main.mergeById1(testCounts, testOrg);
+        Map<String, Integer> res = Main.mapToCounts(testCounts, testOrg);
         System.out.println("res = " + res);
     }
 }

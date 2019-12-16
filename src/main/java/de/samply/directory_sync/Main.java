@@ -1,7 +1,6 @@
 package de.samply.directory_sync;
 
 import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.model.primitive.IdDt;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import com.google.gson.Gson;
@@ -12,7 +11,6 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r4.model.*;
 
 import java.io.IOException;
@@ -28,7 +26,13 @@ public class Main {
     ;
 
     public static void main(String[] args) throws IOException {
-        getBlaze();
+        
+        FhirContext ctx = FhirContext.forR4();
+        IGenericClient client = ctx.newRestfulGenericClient("https://blaze.life.uni-leipzig.de/fhir");
+        client.registerInterceptor(new LoggingInterceptor(true));
+        Map<String, Integer> collectionSize = fetchCollectionSize(client);
+        System.out.println("collectionSize = " + collectionSize);
+        
         // System.out.println(getDirectory());
     }
 
@@ -38,6 +42,7 @@ public class Main {
 
         LoginResponse() {
         }
+
     }
 
 
@@ -74,37 +79,31 @@ public class Main {
     }
 
 
-    static void getBlaze() {
-
-        // Create a client
-        FhirContext ctx = FhirContext.forR4();
-        IGenericClient client = ctx.newRestfulGenericClient("https://blaze.life.uni-leipzig.de/fhir");
-        client.registerInterceptor(new LoggingInterceptor(true));
-        MeasureReport report = getMeasureReport(client, "5df2282b-9c51-4be9-88c9-dd9ddbe1024f");
-
-
+    static Map<String,Integer> fetchCollectionSize(IGenericClient client) {
+        MeasureReport report = getMeasureReport(client, "https://fhir.bbmri.de/Measure/size");
         Map<String, Integer> counts = extractStratifierCounts(report);
-
         List<Organization> collections = fetchCollections(client, counts.keySet());
-
-        Map<String, Integer> bbmriCounts = mergeById(counts, collections);
-
-        System.out.println("bbmriCounts = " + bbmriCounts);
-
-        /*// Print the response bundle
-        return (ctx.newJsonParser().setPrettyPrint(true).encodeResourceToString(response));*/
+        return mapToCounts(counts, collections);
     }
 
 
+    private static MeasureReport getMeasureReport(IGenericClient client, String url) {
+        // Create the input parameters to pass to the server
+        Parameters inParams = new Parameters();
+        inParams.addParameter().setName("periodStart").setValue(new DateType("1900"));
+        inParams.addParameter().setName("periodEnd").setValue(new DateType("2100"));
+        inParams.addParameter().setName("measure").setValue(new StringType(url));
 
-    private static List<Organization> fetchCollections(IGenericClient client, Collection<String> ids) {
-        Bundle response = (Bundle) client.search().forResource(Organization.class)
-                .where(Organization.RES_ID.exactly().codes(ids)).execute();
+        Parameters outParams = client
+                .operation()
+                .onType(Measure.class)
+                .named("$evaluate-measure")
+                .withParameters(inParams)
+                .useHttpGet()
+                .execute();
 
-        return response.getEntry().stream()
-                .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
-                .map(e -> (Organization) e.getResource())
-                .collect(Collectors.toList());
+
+        return (MeasureReport) outParams.getParameter().get(0).getResource();
     }
 
 
@@ -115,31 +114,23 @@ public class Main {
                        s -> s.getPopulationFirstRep().getCount()));
     }
 
-    private static MeasureReport getMeasureReport(IGenericClient client, String id) {
-        // Create the input parameters to pass to the server
-        Parameters inParams = new Parameters();
-        inParams.addParameter().setName("periodStart").setValue(new DateType("1900"));
-        inParams.addParameter().setName("periodEnd").setValue(new DateType("2100"));
-        //TODO add Measure canonicalUrl as Parameter
+    private static List<Organization> fetchCollections(IGenericClient client, Collection<String> ids) {
+        Bundle response = (Bundle) client.search().forResource(Organization.class)
+                .where(Organization.RES_ID.exactly().codes(ids)).execute();
 
-
-        Parameters outParams = client
-                .operation()
-                .onInstance(new IdDt("Measure", id))
-                //TODO use onType instead of onInstance
-                .named("$evaluate-measure")
-                .withParameters(inParams)
-                .useHttpGet()
-                .execute();
-
-
-        return (MeasureReport) outParams.getParameter().get(0).getResource();
+        return response.getEntry().stream()
+                .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
+                .map(e -> (Organization) e.getResource())
+                .collect(Collectors.toList());
     }
+    
 
-    static Map<String, Integer> mergeById(Map<String, Integer> counts, List<Organization> collections) {
+    static Map<String, Integer> mapToCounts(Map<String, Integer> counts, List<Organization> collections) {
         return collections.stream()
                 .filter(o -> BBMRI_ERIC_IDENTIFIER.apply(o).isPresent())
-                .collect(Collectors.toMap(o -> BBMRI_ERIC_IDENTIFIER.apply(o).get(), o -> counts.get(o.getId())));
+                .filter(o -> counts.containsKey(o.getIdElement().getIdPart()))
+                .collect(Collectors.toMap(o -> BBMRI_ERIC_IDENTIFIER.apply(o).get(),
+                        o -> counts.get(o.getIdElement().getIdPart()), Integer::sum));
     }
 
 }
