@@ -22,8 +22,10 @@ import java.util.stream.Collectors;
 
 public class Main {
 
-
-    public static final Function<Resource, String> GET_ID_PART = ((Function<IdType, String>) IdType::getIdPart).compose(Resource::getIdElement);
+    public static final Function<Organization, Optional<String>> BBMRI_ERIC_IDENTIFIER = o ->
+        o.getIdentifier().stream().filter(i -> "http://www.bbmri-eric.eu/".equals(i.getSystem()))
+                .findFirst().map(Identifier::getValue);
+    ;
 
     public static void main(String[] args) throws IOException {
         getBlaze();
@@ -83,7 +85,7 @@ public class Main {
 
         Map<String, Integer> counts = extractStratifierCounts(report);
 
-        Map<String, Organization> collections = fetchCollections(client, counts.keySet());
+        List<Organization> collections = fetchCollections(client, counts.keySet());
 
         Map<String, Integer> bbmriCounts = mergeById(counts, collections);
 
@@ -95,30 +97,22 @@ public class Main {
 
 
 
-    private static Map<String, Organization> fetchCollections(IGenericClient client, Collection<String> ids) {
-        Bundle response = (Bundle) client.search().forResource(Organization.class).where(Organization.RES_ID.exactly().codes(ids)).execute();
+    private static List<Organization> fetchCollections(IGenericClient client, Collection<String> ids) {
+        Bundle response = (Bundle) client.search().forResource(Organization.class)
+                .where(Organization.RES_ID.exactly().codes(ids)).execute();
 
         return response.getEntry().stream()
                 .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
                 .map(e -> (Organization) e.getResource())
-                .collect(Collectors.toMap(GET_ID_PART, Function.identity()));
+                .collect(Collectors.toList());
     }
 
+
     private static Map<String, Integer> extractStratifierCounts(MeasureReport report) {
-        Map<String, Integer> counts = new HashMap<>();
-
-        for (MeasureReport.StratifierGroupComponent stratum : report.getGroupFirstRep().getStratifierFirstRep().getStratum()) {
-
-            String reference = stratum.getValue().getText();
-            String[] referenceParts = reference.split("/");
-            if (referenceParts.length == 2) {
-                counts.put(referenceParts[1], stratum.getPopulationFirstRep().getCount());
-            } else {
-                throw new IllegalArgumentException(String.format("Invalid collection reference `%s`", reference));
-            }
-
-        }
-        return counts;
+       return report.getGroupFirstRep().getStratifierFirstRep().getStratum().stream()
+               .filter( s -> s.getValue().getText().split("/").length == 2)
+               .collect(Collectors.toMap(s -> s.getValue().getText().split("/")[1],
+                       s -> s.getPopulationFirstRep().getCount()));
     }
 
     private static MeasureReport getMeasureReport(IGenericClient client, String id) {
@@ -142,29 +136,10 @@ public class Main {
         return (MeasureReport) outParams.getParameter().get(0).getResource();
     }
 
-    private static Map<String, Integer> mergeById(Map<String, Integer> counts, Map<String, Organization> collections) {
-        Map<String, Integer> bbmriCounts = new HashMap<>();
-
-        for (Map.Entry<String, Organization> collectionEntry : collections.entrySet()) {
-
-            Organization collection = collectionEntry.getValue();
-
-            for (Identifier identifier : collection.getIdentifier()) {
-                if ("http://www.bbmri-eric.eu/".equals(identifier.getSystem())) {
-                    String bbmriId = identifier.getValue();
-                    if(bbmriId != null){
-                        Integer count = counts.get(collectionEntry.getKey());
-                        if(count != null){
-                            bbmriCounts.put(bbmriId, count);
-                        }
-
-                    }
-
-                }
-            }
-
-        }
-        return bbmriCounts;
+    static Map<String, Integer> mergeById(Map<String, Integer> counts, List<Organization> collections) {
+        return collections.stream()
+                .filter(o -> BBMRI_ERIC_IDENTIFIER.apply(o).isPresent())
+                .collect(Collectors.toMap(o -> BBMRI_ERIC_IDENTIFIER.apply(o).get(), o -> counts.get(o.getId())));
     }
 
 }
