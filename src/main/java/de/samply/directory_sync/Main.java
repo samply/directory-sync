@@ -136,13 +136,19 @@ public class Main {
                         o -> counts.get(o.getIdElement().getIdPart()), Integer::sum));
     }
 
-    static void updateBiobankNameIfChanged(IGenericClient fhirClient, String directoryToken) throws IOException {
+    static void updateBiobankNameIfChanged(IGenericClient fhirClient, CloseableHttpClient httpClient, String directoryToken) throws IOException {
         //TODO Maybe return List of updated Biobanks?
         Bundle response = (Bundle) fhirClient.search().forResource(Organization.class)
                 .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank");
         for(Bundle.BundleEntryComponent entry : response.getEntry()){
             Organization fhirBiobank = (Organization) entry.getResource();
-            String bbmriId = BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank).get();
+            Optional<String> optBbmriId = BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank);
+            String bbmriId = null;
+            if(optBbmriId.isEmpty()){
+                break;
+            }else {
+                bbmriId = optBbmriId.get();
+            }
 
             //TODO Check if this works
             HttpGet httpGet = new HttpGet("http://localhost:8081/api/v2/eu_bbmri_eric_biobanks/"+bbmriId);
@@ -150,7 +156,6 @@ public class Main {
             httpGet.setHeader("Accept", "application/json");
             httpGet.setHeader("Content-type", "application/json");
 
-            CloseableHttpClient httpClient = HttpClients.createDefault();
             CloseableHttpResponse directoryResponse = httpClient.execute(httpGet);
             String biobankJson = EntityUtils.toString(directoryResponse.getEntity());
             httpClient.close();
