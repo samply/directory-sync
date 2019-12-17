@@ -337,8 +337,8 @@ class MainTest {
                 "\"country\":{\"_href\":\"/api/v2/eu_bbmri_eric_countries/DE\",\"id\":\"DE\",\"name\":\"Germany\"}," +
                 "\"it_support_available\":true,\"it_staff_size\":2,\"is_available\":true," +
                 "\"partner_charter_signed\":false,\"head_firstname\":\"Vlad\",\"head_lastname\":\"Dracula\"," +
-                "\"head_role\":\"Scientific Head\",\"contact_priority\":1,\"latitude\":\"51.050407\"," +
-                "\"longitude\":\"13.737262\",\"also_known\":[]," +
+                "\"head_role\":\"Scientific Head\",\"contact_priority\":1,\"latitude\":\"52.510494\"," +
+                "\"longitude\":\"13.396764\",\"also_known\":[]," +
                 "\"contact\":{\"_href\":\"/api/v2/eu_bbmri_eric_persons/bbmri-eric:contactID:DE_TEST\"," +
                 "\"id\":\"bbmri-eric:contactID:DE_TEST\",\"email\":\"test@example.org\"}," +
                 "\"collections\":[{\"_href\":\"/api/v2/eu_bbmri_eric_collections/bbmri-eric:ID:DE_BBD:collection:VAMPIR" +
