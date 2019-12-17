@@ -1,9 +1,12 @@
 package de.samply.directory_sync;
 
 import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
+import ca.uhn.fhir.rest.client.exceptions.FhirClientConnectionException;
 import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import com.google.gson.Gson;
+import de.samply.directory_sync.directory.model.Biobank;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -131,6 +134,45 @@ public class Main {
                 .filter(o -> counts.containsKey(o.getIdElement().getIdPart()))
                 .collect(Collectors.toMap(o -> BBMRI_ERIC_IDENTIFIER.apply(o).get(),
                         o -> counts.get(o.getIdElement().getIdPart()), Integer::sum));
+    }
+
+    static void updateBiobankNameIfChanged(IGenericClient fhirClient, String directoryToken) throws IOException {
+        //TODO Maybe return List of updated Biobanks?
+        Bundle response = (Bundle) fhirClient.search().forResource(Organization.class)
+                .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank");
+        for(Bundle.BundleEntryComponent entry : response.getEntry()){
+            Organization fhirBiobank = (Organization) entry.getResource();
+            String bbmriId = BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank).get();
+
+            //TODO Check if this works
+            HttpGet httpGet = new HttpGet("http://localhost:8081/api/v2/eu_bbmri_eric_biobanks/"+bbmriId);
+            httpGet.setHeader("x-molgenis-token", directoryToken);
+            httpGet.setHeader("Accept", "application/json");
+            httpGet.setHeader("Content-type", "application/json");
+
+            CloseableHttpClient httpClient = HttpClients.createDefault();
+            CloseableHttpResponse directoryResponse = httpClient.execute(httpGet);
+            String biobankJson = EntityUtils.toString(directoryResponse.getEntity());
+            httpClient.close();
+
+            Gson gson = new Gson();
+            Biobank dirBiobank = gson.fromJson(biobankJson, Biobank.class);
+            if(!dirBiobank.getName().trim().equalsIgnoreCase(fhirBiobank.getName().trim())){
+                fhirBiobank.setName(dirBiobank.getName());
+                try{
+                    fhirClient.update().resource(fhirBiobank).execute();
+                }catch (FhirClientConnectionException e){
+                    //TODO Smthg useful
+                }
+            }
+
+
+
+
+        }
+
+
+
     }
 
 }
