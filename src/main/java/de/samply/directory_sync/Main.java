@@ -139,13 +139,13 @@ public class Main {
     static void updateBiobankNameIfChanged(IGenericClient fhirClient, CloseableHttpClient httpClient, String directoryToken) throws IOException {
         //TODO Maybe return List of updated Biobanks?
         Bundle response = (Bundle) fhirClient.search().forResource(Organization.class)
-                .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank");
+                .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank").execute();
         for(Bundle.BundleEntryComponent entry : response.getEntry()){
             Organization fhirBiobank = (Organization) entry.getResource();
             Optional<String> optBbmriId = BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank);
             String bbmriId = null;
             if(optBbmriId.isEmpty()){
-                break;
+                continue;
             }else {
                 bbmriId = optBbmriId.get();
             }
