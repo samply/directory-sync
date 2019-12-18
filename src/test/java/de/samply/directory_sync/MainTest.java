@@ -1,18 +1,19 @@
 package de.samply.directory_sync;
 
-import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
+import de.samply.directory_sync.directory.DirectoryApi;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
 import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.Organization;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.junit.runner.RunWith;
+import org.mockito.Answers;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import java.io.IOException;
-import java.net.http.HttpClient;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -22,16 +23,22 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+@RunWith(MockitoJUnitRunner.class)
 class MainTest {
 
+    @Mock
+    DirectoryApi directoryApi;
+
+    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
+    IGenericClient fhirClient;
+
     @Test
-    void mergeById1() {
+    void testMergeById() {
 
         Map<String,Integer> testCounts = new HashMap<>();
         List<Organization> testOrg = new ArrayList<>();
         testCounts.put("1",100);
-        Identifier identifier = new Identifier();
-        identifier.setSystem("http://www.bbmri-eric.eu/").setValue("test");
+        Identifier identifier = createBbmriIdentifier("test");
         testOrg.add((Organization) new Organization().addIdentifier(identifier).setId("1"));
 
         Map<String, Integer> res = Main.mapToCounts(testCounts, testOrg);
@@ -356,21 +363,20 @@ class MainTest {
                 "{\"_href\":\"/api/v2/eu_bbmri_eric_capabilities/nucleic-acid-extraction\"," +
                 "\"id\":\"nucleic-acid-extraction\",\"label\":\"Nucleic acid extraction\"}]," +
                 "\"operational_standards\":[],\"quality\":[]}";
-        CloseableHttpClient mockHttpClient = mock(CloseableHttpClient.class);
-        CloseableHttpResponse mockDirectoryResponse = mock(CloseableHttpResponse.class);
-        when(mockHttpClient.execute(any())).thenReturn(mockDirectoryResponse);
-        when(mockDirectoryResponse.getEntity()).thenReturn(new StringEntity(expResponse));
-        IGenericClient mockFhirClient = mock(IGenericClient.class, Mockito.RETURNS_DEEP_STUBS);
-        Bundle mockBundle = new Bundle();
+
+
         Organization biobank = new Organization();
         biobank.setName("To be replaced");
-        Identifier identifier = new Identifier();
-        identifier.setSystem("http://www.bbmri-eric.eu/").setValue("test");
-        biobank.addIdentifier(identifier);
-        mockBundle.addEntry().setResource(biobank);
-        when(mockFhirClient.search().forResource(Organization.class)
-                .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank").execute()).thenReturn(mockBundle);
-        Main.updateBiobankNameIfChanged(mockFhirClient,mockHttpClient,"dummyValue");
+        biobank.addIdentifier(createBbmriIdentifier("test"));
+        Bundle bundle = new Bundle();
+        bundle.addEntry().setResource(biobank);
+        when(fhirClient.search().forResource(Organization.class)
+                .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank").execute()).thenReturn(bundle);
+
+        CloseableHttpResponse mockDirectoryResponse = mock(CloseableHttpResponse.class);
+        when(mockDirectoryResponse.getEntity()).thenReturn(new StringEntity(expResponse));
+
+        //Main.updateBiobanksIfChanged(sync);
         assertEquals(biobank.getName(),"New Value");
         //TODO Find a way to verify update actually happens
        /**
@@ -380,4 +386,12 @@ class MainTest {
                 .execute();
         **/
     }
+
+    private static Identifier createBbmriIdentifier(String value) {
+        Identifier identifier = new Identifier();
+        identifier.setSystem("http://www.bbmri-eric.eu/").setValue(value);
+        return identifier;
+    }
+
+
 }

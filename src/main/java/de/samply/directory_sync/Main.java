@@ -1,12 +1,9 @@
 package de.samply.directory_sync;
 
 import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
-import ca.uhn.fhir.rest.client.exceptions.FhirClientConnectionException;
 import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import com.google.gson.Gson;
-import de.samply.directory_sync.directory.model.Biobank;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -136,48 +133,20 @@ public class Main {
                         o -> counts.get(o.getIdElement().getIdPart()), Integer::sum));
     }
 
-    static void updateBiobankNameIfChanged(IGenericClient fhirClient, CloseableHttpClient httpClient, String directoryToken) throws IOException {
-        //TODO Maybe return List of updated Biobanks?
-        Bundle response = (Bundle) fhirClient.search().forResource(Organization.class)
+    static List<OperationOutcome> updateBiobanksIfChanged(Sync sync) throws IOException {
+        Bundle response = (Bundle) sync.getFhirApi().getFhirClient().search().forResource(Organization.class)
                 .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank").execute();
-        for(Bundle.BundleEntryComponent entry : response.getEntry()){
-            Organization fhirBiobank = (Organization) entry.getResource();
-            Optional<String> optBbmriId = BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank);
-            String bbmriId = null;
-            if(optBbmriId.isEmpty()){
-                continue;
-            }else {
-                bbmriId = optBbmriId.get();
-            }
 
-            //TODO Check if this works
-            HttpGet httpGet = new HttpGet("http://localhost:8081/api/v2/eu_bbmri_eric_biobanks/"+bbmriId);
-            httpGet.setHeader("x-molgenis-token", directoryToken);
-            httpGet.setHeader("Accept", "application/json");
-            httpGet.setHeader("Content-type", "application/json");
-
-            CloseableHttpResponse directoryResponse = httpClient.execute(httpGet);
-            String biobankJson = EntityUtils.toString(directoryResponse.getEntity());
-            httpClient.close();
-
-            Gson gson = new Gson();
-            Biobank dirBiobank = gson.fromJson(biobankJson, Biobank.class);
-            if(!dirBiobank.getName().trim().equalsIgnoreCase(fhirBiobank.getName().trim())){
-                fhirBiobank.setName(dirBiobank.getName());
-                try{
-                    fhirClient.update().resource(fhirBiobank).execute();
-                }catch (FhirClientConnectionException e){
-                    //TODO Smthg useful
-                }
-            }
-
-
-
-
-        }
-
+        return response.getEntry().stream()
+                .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
+                .map(e -> (Organization) e.getResource())
+                .filter(o -> o.getMeta().getProfile().contains(new CanonicalType("https://fhir.bbmri" +
+                        ".de/StructureDefinition/Biobank")))
+                .map(sync::updateBiobankIfNecessary)
+                .collect(Collectors.toList());
 
 
     }
+
 
 }
