@@ -4,11 +4,12 @@ import de.samply.directory_sync.directory.DirectoryApi;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.fhir.FhirApi;
 import io.vavr.control.Option;
-import org.hl7.fhir.r4.model.OperationOutcome;
-import org.hl7.fhir.r4.model.Organization;
+import org.hl7.fhir.r4.model.*;
 
+import java.io.IOException;
+import java.util.List;
 import java.util.function.Function;
-
+import java.util.stream.Collectors;
 
 
 public class Sync {
@@ -38,6 +39,20 @@ public class Sync {
         return outcome;
     }
 
+    List<OperationOutcome> updateBiobanksIfNecessary(){
+        Bundle response = getFhirApi().listAllBiobanks();
+
+        return response.getEntry().stream()
+                .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
+                .map(e -> (Organization) e.getResource())
+                .filter(o -> o.getMeta().hasProfile("https://fhir.bbmri" +
+                        ".de/StructureDefinition/Biobank"))
+                .map(this::updateBiobankIfNecessary)
+                .collect(Collectors.toList());
+
+
+    }
+
     public FhirApi getFhirApi() {
         return fhirApi;
     }
@@ -52,6 +67,7 @@ public class Sync {
                         .map(t -> fhirApi.updateResource(t.fhirBiobank))
                         .fold(Function.identity(), Function.identity());
     }
+
 
     private static class BiobankTuple {
 

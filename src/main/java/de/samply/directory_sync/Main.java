@@ -133,20 +133,5 @@ public class Main {
                         o -> counts.get(o.getIdElement().getIdPart()), Integer::sum));
     }
 
-    static List<OperationOutcome> updateBiobanksIfChanged(Sync sync) throws IOException {
-        Bundle response = (Bundle) sync.getFhirApi().getFhirClient().search().forResource(Organization.class)
-                .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank").execute();
-
-        return response.getEntry().stream()
-                .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
-                .map(e -> (Organization) e.getResource())
-                .filter(o -> o.getMeta().getProfile().contains(new CanonicalType("https://fhir.bbmri" +
-                        ".de/StructureDefinition/Biobank")))
-                .map(sync::updateBiobankIfNecessary)
-                .collect(Collectors.toList());
-
-
-    }
-
 
 }
