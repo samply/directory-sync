@@ -25,6 +25,10 @@ public class Main {
                 .findFirst().map(Identifier::getValue);
     ;
 
+
+    /**
+     * @param args username password
+     */
     public static void main(String[] args) throws IOException {
         
         FhirContext ctx = FhirContext.forR4();
@@ -33,7 +37,7 @@ public class Main {
         Map<String, Integer> collectionSize = fetchCollectionSize(client);
         System.out.println("collectionSize = " + collectionSize);
 
-        System.out.println(getDirectory());
+        System.out.println(getDirectory(args[0], args[1]));
     }
 
 
@@ -55,11 +59,11 @@ public class Main {
     }
 
 
-    static String getDirectory() throws IOException {
+    static String getDirectory(String username, String password) throws IOException {
         CloseableHttpClient client = HttpClients.createDefault();
         HttpPost httpPost = new HttpPost("https://molgenis39.gcc.rug.nl/api/v1/login");
 
-        httpPost.setEntity(new StringEntity(new Gson().toJson(new LoginCredential("Breu_M@ukw.de", "Halo=duda171"))));
+        httpPost.setEntity(new StringEntity(new Gson().toJson(new LoginCredential(username, password))));
         httpPost.setHeader("Accept", "application/json");
         httpPost.setHeader("Content-type", "application/json");
 
