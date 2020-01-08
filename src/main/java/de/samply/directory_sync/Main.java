@@ -32,8 +32,8 @@ public class Main {
         client.registerInterceptor(new LoggingInterceptor(true));
         Map<String, Integer> collectionSize = fetchCollectionSize(client);
         System.out.println("collectionSize = " + collectionSize);
-        
-        // System.out.println(getDirectory());
+
+        System.out.println(getDirectory());
     }
 
 
@@ -45,28 +45,31 @@ public class Main {
 
     }
 
+    static class LoginCredential {
+        String username, password;
+
+        LoginCredential(String username, String password) {
+            this.username = username;
+            this.password = password;
+        }
+    }
+
 
     static String getDirectory() throws IOException {
         CloseableHttpClient client = HttpClients.createDefault();
-        HttpPost httpPost = new HttpPost("http://localhost:8081/api/v1/login");
+        HttpPost httpPost = new HttpPost("https://molgenis39.gcc.rug.nl/api/v1/login");
 
-        //TODO Build via Object and Gson
-        String json = "{\n" +
-                "  \"username\": \"admin\",\n" +
-                "  \"password\": \"admin\"\n" +
-                "}";
-        StringEntity entity = new StringEntity(json);
-        httpPost.setEntity(entity);
+        httpPost.setEntity(new StringEntity(new Gson().toJson(new LoginCredential("Breu_M@ukw.de", "Halo=duda171"))));
         httpPost.setHeader("Accept", "application/json");
         httpPost.setHeader("Content-type", "application/json");
 
         CloseableHttpResponse tokenResponse = client.execute(httpPost);
         String body = EntityUtils.toString(tokenResponse.getEntity());
-        Gson gson = new Gson();
-        LoginResponse loginResponse = gson.fromJson(body, LoginResponse.class);
+        LoginResponse loginResponse = new Gson().fromJson(body, LoginResponse.class);
         String token = loginResponse.token;
+        System.out.println(token);
 
-        HttpGet httpGet = new HttpGet("http://localhost:8081/api/v2/eu_bbmri_eric_collections");
+        HttpGet httpGet = new HttpGet("https://molgenis39.gcc.rug.nl/api/v2/eu_bbmri_eric_collections");
         httpGet.setHeader("x-molgenis-token", token);
         httpGet.setHeader("Accept", "application/json");
         httpGet.setHeader("Content-type", "application/json");
