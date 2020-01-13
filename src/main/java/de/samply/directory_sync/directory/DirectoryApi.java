@@ -52,6 +52,12 @@ public class DirectoryApi {
         return outcome;
     }
 
+    static OperationOutcome biobankNotFoundOperationOutcome(String id) {
+        OperationOutcome outcome = new OperationOutcome();
+        outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.INFORMATION).setCode(OperationOutcome.IssueType.NOTFOUND).setDiagnostics(String.format("No Biobank in Directory for %s", id));
+        return outcome;
+    }
+
     public static void main(String[] args) throws IOException {
         DirectoryApi api = createWithToken(HttpClients.createDefault(), "https://molgenis39.gcc.rug.nl", "<token>");
         Either<OperationOutcome, Biobank> biobank = api.fetchBiobank("bbmri-eric:ID:DE_LMB");
@@ -67,9 +73,15 @@ public class DirectoryApi {
 
         try {
             CloseableHttpResponse directoryResponse = httpClient.execute(httpGet);
-            String biobankJson = EntityUtils.toString(directoryResponse.getEntity());
+            String json = EntityUtils.toString(directoryResponse.getEntity());
             httpClient.close();
-            return Either.right(gson.fromJson(biobankJson, Biobank.class));
+            if(directoryResponse.getStatusLine().getStatusCode() == 200){
+                return Either.right(gson.fromJson(json, Biobank.class));
+            }else if(directoryResponse.getStatusLine().getStatusCode() == 404){
+                return Either.left(biobankNotFoundOperationOutcome(id));
+            }else{
+                return Either.left(errorInDirectoryResponseOperationOutcome(id, EntityUtils.toString(directoryResponse.getEntity())));
+            }
         } catch (IOException e) {
             return Either.left(errorInDirectoryResponseOperationOutcome(id, e.getMessage()));
         }

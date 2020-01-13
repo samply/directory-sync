@@ -12,6 +12,7 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.hl7.fhir.r4.model.*;
+import org.w3c.dom.html.HTMLImageElement;
 
 import java.io.IOException;
 import java.util.*;
@@ -26,6 +27,7 @@ public class Main {
 
 
     /**
+     *
      * @param args username password
      */
     public static void main(String[] args) throws IOException {

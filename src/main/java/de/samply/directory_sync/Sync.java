@@ -1,12 +1,18 @@
 package de.samply.directory_sync;
 
+import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.rest.client.api.IGenericClient;
+import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import de.samply.directory_sync.directory.DirectoryApi;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.fhir.FhirApi;
+import io.vavr.control.Either;
 import io.vavr.control.Option;
+import org.apache.http.impl.client.HttpClients;
 import org.hl7.fhir.r4.model.*;
 
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -94,5 +100,26 @@ public class Sync {
         private boolean hasChanged(){
             return !fhirBiobank.equalsDeep(fhirBiobankCopy);
         }
+    }
+
+    public static void main(String[] args) throws IOException {
+
+        FhirContext ctx = FhirContext.forR4();
+        IGenericClient client = ctx.newRestfulGenericClient("https://blaze.life.uni-leipzig.de/fhir");
+        client.registerInterceptor(new LoggingInterceptor(true));
+        FhirApi fhirApi = new FhirApi(client);
+
+        DirectoryApi dirApi = DirectoryApi.createWithLogin(HttpClients.createDefault(),"https://molgenis39.gcc.rug.nl",args[0],args[1]);
+
+/*        Either<OperationOutcome, Biobank> biobank = dirApi.fetchBiobank("bbmri-eric:ID:de_12345");*/
+
+           Sync sync = new Sync(fhirApi,dirApi);
+
+           List<OperationOutcome> operationOutcomes = sync.updateBiobanksIfNecessary();
+
+                  System.out.println(operationOutcomes.stream()
+                          .map(o -> o.getIssueFirstRep().getSeverity()+" "+o.getIssueFirstRep().getDiagnostics())
+                          .collect(Collectors.toList()));
+
     }
 }
