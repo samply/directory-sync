@@ -8,27 +8,28 @@ import org.hl7.fhir.r4.model.OperationOutcome;
 import org.hl7.fhir.r4.model.Organization;
 
 public class FhirApi {
-    private final IGenericClient fhirClient;
 
-    public IGenericClient getFhirClient() {
-        return fhirClient;
-    }
+    private final IGenericClient fhirClient;
 
     public FhirApi(IGenericClient fhirClient) {
         this.fhirClient = fhirClient;
     }
 
+    public IGenericClient getFhirClient() {
+        return fhirClient;
+    }
+
     public OperationOutcome updateResource(IBaseResource theResource) {
         try {
             return (OperationOutcome) fhirClient.update().resource(theResource).prefer(PreferReturnEnum.OPERATION_OUTCOME).execute().getOperationOutcome();
-        }catch(Exception e){
+        } catch (Exception e) {
             OperationOutcome outcome = new OperationOutcome();
             outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics(e.getMessage());
             return outcome;
         }
     }
 
-    public Bundle listAllBiobanks(){
+    public Bundle listAllBiobanks() {
         return (Bundle) fhirClient.search().forResource(Organization.class)
                 .withProfile("https://fhir.bbmri.de/StructureDefinition/Biobank").execute();
     }

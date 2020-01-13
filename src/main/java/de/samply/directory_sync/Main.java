@@ -20,17 +20,16 @@ import java.util.stream.Collectors;
 
 public class Main {
 
-    public static final Function<Organization, Optional<String>> BBMRI_ERIC_IDENTIFIER = o ->
+    static final Function<Organization, Optional<String>> BBMRI_ERIC_IDENTIFIER = o ->
         o.getIdentifier().stream().filter(i -> "http://www.bbmri-eric.eu/".equals(i.getSystem()))
                 .findFirst().map(Identifier::getValue);
-    ;
 
 
     /**
      * @param args username password
      */
     public static void main(String[] args) throws IOException {
-        
+
         FhirContext ctx = FhirContext.forR4();
         IGenericClient client = ctx.newRestfulGenericClient("https://blaze.life.uni-leipzig.de/fhir");
         client.registerInterceptor(new LoggingInterceptor(true));
@@ -130,7 +129,7 @@ public class Main {
                 .map(e -> (Organization) e.getResource())
                 .collect(Collectors.toList());
     }
-    
+
 
     static Map<String, Integer> mapToCounts(Map<String, Integer> counts, List<Organization> collections) {
         return collections.stream()

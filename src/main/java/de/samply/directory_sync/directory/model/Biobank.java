@@ -188,4 +188,11 @@ public class Biobank {
         this.collaboration_non_for_profit = collaboration_non_for_profit;
     }
 
+    @Override
+    public String toString() {
+        return "Biobank{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                '}';
+    }
 }

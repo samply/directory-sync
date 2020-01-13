@@ -14,10 +14,11 @@ import java.util.stream.Collectors;
 
 public class Sync {
 
-    static Function<BiobankTuple, BiobankTuple> UPDATE_BIOBANK_NAME = t -> {
+    private static Function<BiobankTuple, BiobankTuple> UPDATE_BIOBANK_NAME = t -> {
         t.fhirBiobank.setName(t.dirBiobank.getName());
         return t;
     };
+
     private FhirApi fhirApi;
 
     private DirectoryApi directoryApi;
@@ -39,6 +40,11 @@ public class Sync {
         return outcome;
     }
 
+    /**
+     * Updates all biobanks from the FHIR server with information from the Directory.
+     *
+     * @return the individual {@link OperationOutcome}s from each update
+     */
     List<OperationOutcome> updateBiobanksIfNecessary(){
         Bundle response = getFhirApi().listAllBiobanks();
 
@@ -49,22 +55,26 @@ public class Sync {
                         ".de/StructureDefinition/Biobank"))
                 .map(this::updateBiobankIfNecessary)
                 .collect(Collectors.toList());
-
-
     }
 
     public FhirApi getFhirApi() {
         return fhirApi;
     }
 
-    public OperationOutcome updateBiobankIfNecessary(Organization o) {
-        return Option.ofOptional(Main.BBMRI_ERIC_IDENTIFIER.apply(o))
+    /**
+     * Takes a biobank from FHIR and updates it with current information from the Directory.
+     *
+     * @param fhirBiobank the biobank to update.
+     * @return the {@link OperationOutcome} from the FHIR server update
+     */
+    OperationOutcome updateBiobankIfNecessary(Organization fhirBiobank) {
+        return Option.ofOptional(Main.BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank))
                         .toEither(missigIdentifierOperationOutcome())
                         .flatMap(directoryApi::fetchBiobank)
-                        .map(b -> new BiobankTuple(o, b))
+                        .map(dirBiobank -> new BiobankTuple(fhirBiobank, dirBiobank))
                         .map(UPDATE_BIOBANK_NAME)
-                        .filterOrElse(BiobankTuple::hasChanged, t -> noUpdateNecessaryOperationOutcome())
-                        .map(t -> fhirApi.updateResource(t.fhirBiobank))
+                        .filterOrElse(BiobankTuple::hasChanged, tuple -> noUpdateNecessaryOperationOutcome())
+                        .map(tuple -> fhirApi.updateResource(tuple.fhirBiobank))
                         .fold(Function.identity(), Function.identity());
     }
 
