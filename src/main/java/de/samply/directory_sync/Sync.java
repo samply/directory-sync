@@ -6,14 +6,13 @@ import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import de.samply.directory_sync.directory.DirectoryApi;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.fhir.FhirApi;
-import io.vavr.control.Either;
 import io.vavr.control.Option;
 import org.apache.http.impl.client.HttpClients;
 import org.hl7.fhir.r4.model.*;
 
 import java.io.IOException;
-import java.net.http.HttpClient;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -74,7 +73,7 @@ public class Sync {
      * @return the {@link OperationOutcome} from the FHIR server update
      */
     OperationOutcome updateBiobankIfNecessary(Organization fhirBiobank) {
-        return Option.ofOptional(Main.BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank))
+        return Option.ofOptional(FhirApi.BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank))
                         .toEither(missigIdentifierOperationOutcome())
                         .flatMap(directoryApi::fetchBiobank)
                         .map(dirBiobank -> new BiobankTuple(fhirBiobank, dirBiobank))
@@ -102,6 +101,14 @@ public class Sync {
         }
     }
 
+    void updateCollectionSizes(){
+        Map<String, Integer> collectionSizes = fhirApi.fetchCollectionSizes();
+        OperationOutcome operationOutcome = directoryApi.updateCollectionSizes(collectionSizes);
+        System.out.println("operationOutcome.getIssueFirstRep().getDiagnostics() = " + operationOutcome.getIssueFirstRep().getDiagnostics());
+
+    }
+
+
     public static void main(String[] args) throws IOException {
 
         FhirContext ctx = FhirContext.forR4();
@@ -115,11 +122,13 @@ public class Sync {
 
            Sync sync = new Sync(fhirApi,dirApi);
 
-           List<OperationOutcome> operationOutcomes = sync.updateBiobanksIfNecessary();
+//           List<OperationOutcome> operationOutcomes = sync.updateBiobanksIfNecessary();
+//
+//                  System.out.println(operationOutcomes.stream()
+//                          .map(o -> o.getIssueFirstRep().getSeverity()+" "+o.getIssueFirstRep().getDiagnostics())
+//                          .collect(Collectors.toList()));
 
-                  System.out.println(operationOutcomes.stream()
-                          .map(o -> o.getIssueFirstRep().getSeverity()+" "+o.getIssueFirstRep().getDiagnostics())
-                          .collect(Collectors.toList()));
+        sync.updateCollectionSizes();
 
     }
 }

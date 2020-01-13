@@ -2,6 +2,7 @@ package de.samply.directory_sync;
 
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import de.samply.directory_sync.directory.DirectoryApi;
+import de.samply.directory_sync.fhir.FhirApi;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.entity.StringEntity;
 import org.hl7.fhir.r4.model.Bundle;
@@ -24,26 +25,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @RunWith(MockitoJUnitRunner.class)
-class MainTest {
+public class MainTest {
 
     @Mock
     DirectoryApi directoryApi;
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     IGenericClient fhirClient;
-
-    @Test
-    void testMergeById() {
-
-        Map<String,Integer> testCounts = new HashMap<>();
-        List<Organization> testOrg = new ArrayList<>();
-        testCounts.put("1",100);
-        Identifier identifier = createBbmriIdentifier("test");
-        testOrg.add((Organization) new Organization().addIdentifier(identifier).setId("1"));
-
-        Map<String, Integer> res = Main.mapToCounts(testCounts, testOrg);
-        System.out.println("res = " + res);
-    }
 
     @Test
     void testUpdateBiobankNameIfChanged() throws IOException {
@@ -387,7 +375,7 @@ class MainTest {
         **/
     }
 
-    private static Identifier createBbmriIdentifier(String value) {
+    public static Identifier createBbmriIdentifier(String value) {
         Identifier identifier = new Identifier();
         identifier.setSystem("http://www.bbmri-eric.eu/").setValue(value);
         return identifier;
