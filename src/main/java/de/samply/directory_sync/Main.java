@@ -1,8 +1,5 @@
 package de.samply.directory_sync;
 
-import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.rest.client.api.IGenericClient;
-import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import com.google.gson.Gson;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -11,19 +8,13 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import org.hl7.fhir.r4.model.*;
-import org.w3c.dom.html.HTMLImageElement;
 
 import java.io.IOException;
-import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class Main {
 
 
     /**
-     *
      * @param args username password
      */
     public static void main(String[] args) throws IOException {
@@ -81,9 +72,6 @@ public class Main {
 
         return result;
     }
-
-
-
 
 
 }

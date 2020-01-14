@@ -15,7 +15,6 @@ import org.apache.http.util.EntityUtils;
 import org.hl7.fhir.r4.model.OperationOutcome;
 
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -144,7 +143,8 @@ public class DirectoryApi {
         try (CloseableHttpResponse directoryResponse = httpClient.execute(httpGet)) {
             String json = EntityUtils.toString(directoryResponse.getEntity());
             if (directoryResponse.getStatusLine().getStatusCode() == 200) {
-                ItemsDto<IdDto> items = gson.fromJson(json, new TypeToken<ItemsDto<IdDto>>() {}.getType());
+                ItemsDto<IdDto> items = gson.fromJson(json, new TypeToken<ItemsDto<IdDto>>() {
+                }.getType());
                 return Either.right(items.items.stream().map(e -> e.id).collect(Collectors.toSet()));
             } else {
                 return Either.left(errorInDirectoryResponseOperationOutcome("list collection ids",

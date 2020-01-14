@@ -39,7 +39,7 @@ public class Biobank {
 
     boolean collaboration_non_for_profit;
 
-    public Biobank(){
+    public Biobank() {
 
     }
 
