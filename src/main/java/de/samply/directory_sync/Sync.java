@@ -83,7 +83,7 @@ public class Sync {
      *
      * @return the individual {@link OperationOutcome}s from each update
      */
-    List<OperationOutcome> updateAllBiobanksOnFhirServerIfNecessary() {
+    public List<OperationOutcome> updateAllBiobanksOnFhirServerIfNecessary() {
         return fhirApi.listAllBiobanks()
                 .map(orgs -> orgs.stream().map(this::updateBiobankOnFhirServerIfNecessary).collect(Collectors.toList()))
                 .fold(Collections::singletonList, Function.identity());
@@ -112,7 +112,7 @@ public class Sync {
      *
      * @return the outcome of the directory update operation.
      */
-    OperationOutcome syncCollectionSizesToDirectory() {
+    public OperationOutcome syncCollectionSizesToDirectory() {
         return fhirReporting.fetchCollectionSizes()
                 .map(directoryApi::updateCollectionSizes)
                 .fold(Function.identity(), Function.identity());
