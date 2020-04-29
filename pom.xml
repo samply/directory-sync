@@ -15,6 +15,13 @@
             </plugin>
         </plugins>
     </build>
+    <parent>
+        <groupId>de.samply</groupId>
+        <artifactId>parent</artifactId>
+        <version>10.1</version>
+    </parent>
+    
+         
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
