@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/samply/directory-sync.svg?branch=master)](https://travis-ci.com/samply/directory-sync)
+
 # directory-sync
 
 | Anfrage | Subject | Stratifier | Scoring |
