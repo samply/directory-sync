@@ -153,4 +153,25 @@
         </repository>
     </distributionManagement>
 
+    <developers>
+        <developer>
+            <name>Alexander Kiel</name>
+            <email>alexander.kiel@life.uni-leipzig.de</email>
+            <organization>Leipzig University</organization>
+            <organizationUrl>https://www.uni-leipzig.de/en/</organizationUrl>
+        </developer>
+        <developer>
+            <name>Deniz Tas</name>
+            <email>d.tas@dkfz-heidelberg.de</email>
+            <organization>German Cancer Research Center</organization>
+            <organizationUrl>https://www.dkfz.de/en/</organizationUrl>
+        </developer>
+        <developer>
+            <name>Noemi Deppenwiese</name>
+            <email>noemi.deppenwiese@fau.de</email>
+            <organization>Friedrich-Alexander-University Erlangen-Nürnberg</organization>
+            <organizationUrl>https://www.fau.eu/</organizationUrl>
+        </developer>
+    </developers>
+
 </project>
