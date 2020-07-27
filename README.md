@@ -9,7 +9,7 @@ Based on the mapping from https://samply.github.io/bbmri-fhir-ig/mappings.html.
 #### Biobank
 
 | BBMRI-ERIC-Field | Source of Truth | Status |
-|--|--|
+|--|--|--|
 |id | Both! |*Used as primary means of biobank identification, should not change* |
 |name | Directory | active |
 |acronym | Directory | TODO |
@@ -40,7 +40,7 @@ Based on the mapping from https://samply.github.io/bbmri-fhir-ig/mappings.html.
 #### Contact Information
 Unsolved problem: How do we identify corresponding contacts in the directory and FHIR? Contacts have no identifier in FHIR.
 | BBMRI-ERIC-Field | Source of Truth | Status |
-|--|--|
+|--|--|--|
 | title_before_name | Directory | TODO |
 |first_name | Directory | TODO |
 |last_name | Directory | TODO |
@@ -55,7 +55,7 @@ Unsolved problem: How do we identify corresponding contacts in the directory and
 #### Collection
 
 | BBMRI-ERIC-Field | Source of Truth | Status |
-|--|--|
+|--|--|--|
 |id | Both! |*Used as primary means of biobank identification, should not change* |
 |country | Directory | TODO |
 |biobank | -- | *Not expected to change* |
