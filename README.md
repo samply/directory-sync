@@ -1,8 +1,18 @@
 [![Build Status](https://travis-ci.com/samply/directory-sync.svg?branch=master)](https://travis-ci.com/samply/directory-sync)
 
-# directory-sync
+# Directory Sync
 
 Based on the mapping from https://samply.github.io/bbmri-fhir-ig/mappings.html.
+
+## Usage
+
+```xml
+<dependency>
+    <groupId>de.samply</groupId>
+    <artifactId>directory-sync</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
 
 # Directory fields and support status
 
@@ -113,11 +123,7 @@ Unsolved problem: How do we identify corresponding contacts in the directory and
 |data_transport_sop | Directory | TODO |
 |data_storage_sop | Directory | TODO |
 
-
-
-
-
-# docu
+## Docu
 
 | Anfrage | Subject | Stratifier | Scoring |
 |---------|---------|------------|---------|
