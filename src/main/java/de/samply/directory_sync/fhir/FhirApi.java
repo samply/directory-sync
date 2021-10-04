@@ -6,12 +6,13 @@ import io.vavr.control.Either;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.r4.model.*;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static java.util.Collections.emptyList;
 
 /**
  * Provides convenience methods for selected FHIR operations.
@@ -47,9 +48,9 @@ public class FhirApi {
     }
 
     /**
-     * Lists all Organization
+     * Lists all biobanks in form of Organization resources.
      *
-     * @return
+     * @return either a list of biobanks or an operation outcome
      */
     public Either<OperationOutcome, List<Organization>> listAllBiobanks() {
         try {
@@ -107,7 +108,7 @@ public class FhirApi {
      */
     Either<OperationOutcome, List<Organization>> fetchCollections(Set<String> ids) {
         if (ids.isEmpty()) {
-            return Either.right(Collections.EMPTY_LIST);
+            return Either.right(emptyList());
         }
         try {
             Bundle response = (Bundle) fhirClient.search().forResource(Organization.class)
