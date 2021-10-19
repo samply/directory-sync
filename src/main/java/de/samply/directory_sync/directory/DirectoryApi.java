@@ -82,7 +82,6 @@ public class DirectoryApi {
     }
 
     public Either<OperationOutcome, Biobank> fetchBiobank(String id) {
-        //TODO Check if this works
         HttpGet httpGet = new HttpGet(baseUrl + "/api/v2/eu_bbmri_eric_biobanks/" + id);
         httpGet.setHeader("x-molgenis-token", directoryToken);
         httpGet.setHeader("Accept", "application/json");
@@ -103,6 +102,7 @@ public class DirectoryApi {
     }
 
     public OperationOutcome updateCollectionSizes(Map<String, Integer> collectionSizes) {
+        // Pull a list of all collection IDs from the Directory
         Either<OperationOutcome, Set<String>> result = listAllCollectionIds();
         if (result.isLeft()) {
             return result.getLeft();
@@ -110,6 +110,8 @@ public class DirectoryApi {
 
         Set<String> existingCollectionIds = result.get();
 
+        // Look to see which of the local collections are known to the Directory,
+        // and add their counts to the corresponding Dtos
         List<CollectionSizeDto> collectionSizeDtos = collectionSizes.entrySet().stream()
                 .filter(e -> existingCollectionIds.contains(e.getKey()))
                 .map(e -> new CollectionSizeDto(e.getKey(), e.getValue()))
@@ -117,7 +119,10 @@ public class DirectoryApi {
 
         String payload = gson.toJson(new EntitiesDto<>(collectionSizeDtos));
 
-        HttpPut httpPut = new HttpPut(baseUrl + "/api/v2/eu_bbmri_eric_collections/size");
+        // Push the counts back to the Directory. You need 'update data' permission
+        // on entity type 'Collections' at the Directory in order for this to work.
+//        HttpPut httpPut = new HttpPut(baseUrl + "/api/v2/eu_bbmri_eric_collections/size");
+        HttpPut httpPut = new HttpPut(baseUrl + "/api/v2/eu_bbmri_eric_DE_collections/size");
         httpPut.setHeader("x-molgenis-token", directoryToken);
         httpPut.setHeader("Accept", "application/json");
         httpPut.setHeader("Content-type", "application/json");
@@ -136,7 +141,12 @@ public class DirectoryApi {
     }
 
     Either<OperationOutcome, Set<String>> listAllCollectionIds() {
-        HttpGet httpGet = new HttpGet(baseUrl + "/api/v2/eu_bbmri_eric_collections?attrs=id");
+        // Call the Directory to get a list of all European collection IDs.
+        // If you simply specify "attrs=id", you will only get the first 100
+        // IDs. Setting "start" to 0 and "num" its maximum allowed value
+        // gets them all. Note that in the current Directory implementation
+        // (12.10.2021), the maximum allowed value of "num" is 10000.
+        HttpGet httpGet = new HttpGet(baseUrl + "/api/v2/eu_bbmri_eric_collections?attrs=id&start=0&num=10000");
         httpGet.setHeader("x-molgenis-token", directoryToken);
         httpGet.setHeader("Accept", "application/json");
 
