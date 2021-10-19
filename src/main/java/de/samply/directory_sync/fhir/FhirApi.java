@@ -69,6 +69,27 @@ public class FhirApi {
     }
 
     /**
+     * Lists all Organizations of type Collection in the Store
+     *
+     * @return
+     */
+    public Either<OperationOutcome, List<Organization>> listAllCollections() {
+        try {
+            return Either.right(((Bundle) fhirClient.search().forResource(Organization.class)
+                    .withProfile("https://fhir.bbmri.de/StructureDefinition/Collection").execute())
+                    .getEntry().stream()
+                    .filter(e -> e.getResource().getResourceType() == ResourceType.Organization)
+                    .map(e -> (Organization) e.getResource())
+                    .filter(o -> o.getMeta().hasProfile("https://fhir.bbmri.de/StructureDefinition/Collection"))
+                    .collect(Collectors.toList()));
+        } catch (Exception e) {
+            OperationOutcome outcome = new OperationOutcome();
+            outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics(e.getMessage());
+            return Either.left(outcome);
+        }
+    }
+
+    /**
      * Executes the Measure with the given canonical URL.
      *
      * @param url canonical URL of the Measure to be executed
@@ -118,6 +139,26 @@ public class FhirApi {
                     .filter(e -> ResourceType.Organization == e.getResource().getResourceType())
                     .map(e -> (Organization) e.getResource())
                     .collect(Collectors.toList()));
+        } catch (Exception e) {
+            OperationOutcome outcome = new OperationOutcome();
+            outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics(e.getMessage());
+            return Either.left(outcome);
+        }
+    }
+
+    /**
+     * Counts the Specimen resources available.
+     *
+     * @return Count of Specimen Resources or OperationOutcome in case of failure.
+     */
+    Either<Object, Integer> fetchSpecimenCount() {
+        try {
+            Bundle response = (Bundle) fhirClient.search().forResource(Specimen.class).execute();
+
+            return Either.right(response.getEntry().stream()
+                    .filter(e -> ResourceType.Specimen == e.getResource().getResourceType())
+                    .map(e -> (Specimen) e.getResource())
+                    .collect(Collectors.toList()).size());
         } catch (Exception e) {
             OperationOutcome outcome = new OperationOutcome();
             outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics(e.getMessage());

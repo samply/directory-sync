@@ -6,7 +6,7 @@
 
     <groupId>de.samply</groupId>
     <artifactId>directory-sync</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1-SNAPSHOT</version>
 
     <name>directory-sync</name>
     <description>Syncs Information between the BBMRI-ERIC Biobank Directory and the local bridgehead</description>
