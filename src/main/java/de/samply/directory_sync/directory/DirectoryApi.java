@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import de.samply.directory_sync.directory.model.Biobank;
 import io.vavr.control.Either;
+import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -15,6 +16,7 @@ import org.apache.http.util.EntityUtils;
 import org.hl7.fhir.r4.model.OperationOutcome;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,7 +32,7 @@ public class DirectoryApi {
 
     private DirectoryApi(CloseableHttpClient httpClient, String baseUrl, String directoryToken) {
         this.httpClient = httpClient;
-        this.baseUrl = baseUrl;
+        this.baseUrl = baseUrl.replaceFirst("/*$", "");
         this.directoryToken = directoryToken;
     }
 
@@ -41,7 +43,6 @@ public class DirectoryApi {
         httpPost.setHeader("Accept", "application/json");
         httpPost.setHeader("Content-type", "application/json");
         httpPost.setEntity(new StringEntity(new Gson().toJson(new LoginCredential(username, password)), "utf-8"));
-
         CloseableHttpResponse tokenResponse = httpClient.execute(httpPost);
         String body = EntityUtils.toString(tokenResponse.getEntity(), "utf-8");
         LoginResponse loginResponse = new Gson().fromJson(body, LoginResponse.class);
@@ -51,6 +52,19 @@ public class DirectoryApi {
 
     public static DirectoryApi createWithToken(CloseableHttpClient httpClient, String baseUrl, String token) throws IOException {
         return new DirectoryApi(httpClient, baseUrl, token);
+    }
+
+    /**
+     * Returns true if the stored token from the Directory is null.
+     *
+     * The token will be null if either:
+     * 1. Authorization has not yet been carried out, or
+     * 2. Authorization has failed.
+     *
+     * @return
+     */
+    public boolean isNullToken() {
+        return directoryToken == null;
     }
 
     static OperationOutcome errorInDirectoryResponseOperationOutcome(String id, String message) {
@@ -78,11 +92,12 @@ public class DirectoryApi {
                 "<token>");
 //        Either<OperationOutcome, Biobank> biobank = api.fetchBiobank("bbmri-eric:ID:DE_LMB");
 //        System.out.println("biobank = " + biobank);
-        System.out.println(api.listAllCollectionIds());
+        System.out.println(api.listAllCollectionIds("eu_bbmri_eric_biobanks"));
     }
 
     public Either<OperationOutcome, Biobank> fetchBiobank(String id) {
-        HttpGet httpGet = new HttpGet(baseUrl + "/api/v2/eu_bbmri_eric_biobanks/" + id);
+        String directoryBiobankEntity = generateBiobanksEntityFromDirectoryId(id);
+        HttpGet httpGet = new HttpGet(baseUrl + "/api/v2/" + directoryBiobankEntity + "/" + id);
         httpGet.setHeader("x-molgenis-token", directoryToken);
         httpGet.setHeader("Accept", "application/json");
 
@@ -101,28 +116,58 @@ public class DirectoryApi {
         }
     }
 
+    /**
+     * Send the collection sizes to the Directory.
+     *
+     * @param collectionSizes
+     * @return
+     */
     public OperationOutcome updateCollectionSizes(Map<String, Integer> collectionSizes) {
+        if (collectionSizes.size() == 0)
+            return errorInDirectoryResponseOperationOutcome("collection size update", "Empty list of collection sizes");
+        OperationOutcome returnVal = errorInDirectoryResponseOperationOutcome("collection size update", "Unknown error");
+        for (String collectionID : collectionSizes.keySet()) {
+            returnVal = updateCollectionSize(collectionID, collectionSizes.get(collectionID));
+            if (returnVal.hasIssue() && returnVal.getIssue().get(0).hasSeverity() && returnVal.getIssue().get(0).getSeverity().equals(OperationOutcome.IssueSeverity.ERROR))
+                break;
+        }
+
+        // TODO:
+        // This function will only return a message from one collection.
+        // This may never be a problem, because we anticipate that most sites
+        // will only have a single collection. But in the future, message handling
+        // may need to be improved.
+        return returnVal;
+    }
+
+    /**
+     * Send the size of the supplied collection to the Directory.
+     * @param collectionId a valid Directory Collection ID, e.g. "bbmri-eric:ID:DE_12345:collection:0"
+     * @param collectionSize the number of samples in the collection
+     * @return
+     */
+    public OperationOutcome updateCollectionSize(String collectionId, Integer collectionSize) {
+        String directoryCollectionEntity = generateCollectionsEntityFromDirectoryId(collectionId);
+
         // Pull a list of all collection IDs from the Directory
-        Either<OperationOutcome, Set<String>> result = listAllCollectionIds();
+        Either<OperationOutcome, Set<String>> result = listAllCollectionIds(directoryCollectionEntity);
         if (result.isLeft()) {
             return result.getLeft();
         }
 
         Set<String> existingCollectionIds = result.get();
 
-        // Look to see which of the local collections are known to the Directory,
-        // and add their counts to the corresponding Dtos
-        List<CollectionSizeDto> collectionSizeDtos = collectionSizes.entrySet().stream()
-                .filter(e -> existingCollectionIds.contains(e.getKey()))
-                .map(e -> new CollectionSizeDto(e.getKey(), e.getValue()))
-                .collect(Collectors.toList());
+        if ( ! existingCollectionIds.contains(collectionId))
+            return errorInDirectoryResponseOperationOutcome("collection size update", "Collection ID " + collectionId + " was not found in Directory entity " + directoryCollectionEntity);
+
+        List<CollectionSizeDto> collectionSizeDtos = new ArrayList<CollectionSizeDto>();
+        collectionSizeDtos.add(new CollectionSizeDto(collectionId, collectionSize));
 
         String payload = gson.toJson(new EntitiesDto<>(collectionSizeDtos));
 
         // Push the counts back to the Directory. You need 'update data' permission
         // on entity type 'Collections' at the Directory in order for this to work.
-//        HttpPut httpPut = new HttpPut(baseUrl + "/api/v2/eu_bbmri_eric_collections/size");
-        HttpPut httpPut = new HttpPut(baseUrl + "/api/v2/eu_bbmri_eric_DE_collections/size");
+        HttpPut httpPut = new HttpPut(baseUrl + "/api/v2/" + directoryCollectionEntity + "/size");
         httpPut.setHeader("x-molgenis-token", directoryToken);
         httpPut.setHeader("Accept", "application/json");
         httpPut.setHeader("Content-type", "application/json");
@@ -140,13 +185,67 @@ public class DirectoryApi {
         }
     }
 
-    Either<OperationOutcome, Set<String>> listAllCollectionIds() {
+    /**
+     * Takes a Collection ID or a Biobank ID and extracts the country code from it.
+     * Returns an empty string if no country code can be found in the ID (e.g. if
+     * the ID is not a valid Directory ID).
+     *
+     * @param directoryId e.g. "bbmri-eric:ID:DE_12345:collection:0"
+     * @return country code, e.g. "DE".
+     */
+    private String extractCountryCodeFromDirectoryId(String directoryId) {
+        String[] parts = directoryId.split(":");
+        if (parts.length < 3)
+            return "";
+        String id = parts[2];
+        String[] subParts = id.split("_");
+        if (subParts.length < 2)
+            return "";
+        String countryCode = subParts[0].toUpperCase();
+        if (countryCode.length() > 3)
+            return "";
+        if ( ! countryCode.matches("^[A-Z]+$"))
+            return "";
+
+        return countryCode;
+    }
+
+    /**
+     * Generate a Directory Biobank entity for the national node responsible
+     * for this biobank.
+     **/
+    private String generateBiobanksEntityFromDirectoryId(String directoryId) {
+        String countryCode = extractCountryCodeFromDirectoryId(directoryId);
+
+        return "eu_bbmri_eric_" + countryCode + "_biobanks";
+    }
+
+    /**
+     * Generate a Directory Collection entity for the national node responsible
+     * for the collections at this biobank.
+     **/
+    private String generateCollectionsEntityFromDirectoryId(String directoryId) {
+        String countryCode = extractCountryCodeFromDirectoryId(directoryId);
+
+        return "eu_bbmri_eric_" + countryCode + "_collections";
+    }
+
+    /**
+     * Make a call to the Directory to get all Collection IDs for the supplied entity.
+     * The entity will correspond to a national node, e.g. Germany.
+     *
+     * @param directoryCollectionEntity a Directory entity that contains Collections,
+     *                                  e.g. "eu_bbmri_eric_DE_collections".
+     * @return all the Collections for this entity. E.g. for "eu_bbmri_eric_DE_collections", this
+     * will return all German collections.
+     */
+    Either<OperationOutcome, Set<String>> listAllCollectionIds(String directoryCollectionEntity) {
         // Call the Directory to get a list of all European collection IDs.
         // If you simply specify "attrs=id", you will only get the first 100
         // IDs. Setting "start" to 0 and "num" its maximum allowed value
         // gets them all. Note that in the current Directory implementation
         // (12.10.2021), the maximum allowed value of "num" is 10000.
-        HttpGet httpGet = new HttpGet(baseUrl + "/api/v2/eu_bbmri_eric_collections?attrs=id&start=0&num=10000");
+        HttpGet httpGet = new HttpGet(baseUrl + "/api/v2/" + directoryCollectionEntity + "?attrs=id&start=0&num=10000");
         httpGet.setHeader("x-molgenis-token", directoryToken);
         httpGet.setHeader("Accept", "application/json");
 
