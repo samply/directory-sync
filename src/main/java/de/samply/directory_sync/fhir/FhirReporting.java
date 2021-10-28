@@ -52,7 +52,7 @@ public class FhirReporting {
         // of samples, without checking to see which Collection they belong to.
         Either<OperationOutcome, List<Organization>> biobanksOutcome = fhirApi.listAllBiobanks();
         Either<OperationOutcome, List<Organization>> collectionsOutcome = fhirApi.listAllCollections();
-        if (biobanksOutcome.isRight() && collectionsOutcome.isRight()) {
+        if (biobanksOutcome != null && biobanksOutcome.isRight() && collectionsOutcome != null && collectionsOutcome.isRight()) {
             List<Organization> biobanks = biobanksOutcome.get();
             List<Organization> collections = collectionsOutcome.get();
             if (biobanks.size() == 1 && collections.size() == 1) {
