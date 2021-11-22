@@ -4,6 +4,7 @@ import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import de.samply.directory_sync.directory.DirectoryApi;
+import de.samply.directory_sync.directory.DirectoryService;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.fhir.FhirApi;
 import de.samply.directory_sync.fhir.FhirReporting;
@@ -34,11 +35,14 @@ public class Sync {
     private final FhirApi fhirApi;
     private final FhirReporting fhirReporting;
     private final DirectoryApi directoryApi;
+    private final DirectoryService directoryService;
 
-    public Sync(FhirApi fhirApi, FhirReporting fhirReporting, DirectoryApi directoryApi) {
+    public Sync(FhirApi fhirApi, FhirReporting fhirReporting, DirectoryApi directoryApi,
+        DirectoryService directoryService) {
         this.fhirApi = fhirApi;
         this.fhirReporting = fhirReporting;
         this.directoryApi = directoryApi;
+        this.directoryService = directoryService;
     }
 
     private static OperationOutcome missingIdentifierOperationOutcome() {
@@ -52,30 +56,6 @@ public class Sync {
         outcome.addIssue().setSeverity(INFORMATION).setDiagnostics("No Update " +
                 "necessary");
         return outcome;
-    }
-
-    public static void main(String[] args) throws IOException {
-
-        FhirContext ctx = FhirContext.forR4();
-        IGenericClient client = ctx.newRestfulGenericClient("https://blaze.life.uni-leipzig.de/fhir");
-        client.registerInterceptor(new LoggingInterceptor(true));
-        FhirApi fhirApi = new FhirApi(client);
-
-        DirectoryApi dirApi = DirectoryApi.createWithLogin(HttpClients.createDefault(), "https://molgenis39.gcc.rug" +
-                ".nl", args[0], args[1]);
-
-        /*        Either<OperationOutcome, Biobank> biobank = dirApi.fetchBiobank("bbmri-eric:ID:de_12345");*/
-
-        // Sync sync = new Sync(fhirApi, fhirReporting, dirApi);
-
-//           List<OperationOutcome> operationOutcomes = sync.updateBiobanksIfNecessary();
-//
-//                  System.out.println(operationOutcomes.stream()
-//                          .map(o -> o.getIssueFirstRep().getSeverity()+" "+o.getIssueFirstRep().getDiagnostics())
-//                          .collect(Collectors.toList()));
-
-        //  sync.updateCollectionSizes();
-
     }
 
     /**
@@ -114,7 +94,7 @@ public class Sync {
      */
     public OperationOutcome syncCollectionSizesToDirectory() {
         return fhirReporting.fetchCollectionSizes()
-                .map(directoryApi::updateCollectionSizes)
+                .map(directoryService::updateCollectionSizes)
                 .fold(Function.identity(), Function.identity());
     }
 

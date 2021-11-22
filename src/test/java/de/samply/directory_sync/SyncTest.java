@@ -1,6 +1,7 @@
 package de.samply.directory_sync;
 
 import de.samply.directory_sync.directory.DirectoryApi;
+import de.samply.directory_sync.directory.DirectoryService;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.fhir.FhirApi;
 import de.samply.directory_sync.fhir.FhirReporting;
@@ -11,6 +12,7 @@ import org.hl7.fhir.r4.model.Organization;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,6 +36,10 @@ public class SyncTest {
     @Mock
     private DirectoryApi directoryApi;
 
+    @Mock
+    private DirectoryService directoryService;
+
+    @InjectMocks
     private Sync sync;
 
     public static Identifier createBbmriIdentifier(String value) {
@@ -42,17 +48,12 @@ public class SyncTest {
         return identifier;
     }
 
-    @BeforeEach
-    void setUp() {
-        sync = new Sync(fhirApi, fhirReporting, directoryApi);
-    }
-
     @Test
     void testUpdateCollectionSizes() {
         Map<String, Integer> sizes = Collections.singletonMap("id-165139", 165148);
         OperationOutcome outcome = new OperationOutcome();
         when(fhirReporting.fetchCollectionSizes()).thenReturn(Either.right(sizes));
-        when(directoryApi.updateCollectionSizes(sizes)).thenReturn(outcome);
+        when(directoryService.updateCollectionSizes(sizes)).thenReturn(outcome);
 
         OperationOutcome result = sync.syncCollectionSizesToDirectory();
 
