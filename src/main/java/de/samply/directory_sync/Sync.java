@@ -18,21 +18,22 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.ERROR;
+import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.INFORMATION;
+
 /**
  * Provides functionality to synchronize MOLGENIS directory and FHIR server in both directions.
  */
 public class Sync {
 
-    private static Function<BiobankTuple, BiobankTuple> UPDATE_BIOBANK_NAME = t -> {
+    private static final Function<BiobankTuple, BiobankTuple> UPDATE_BIOBANK_NAME = t -> {
         t.fhirBiobank.setName(t.dirBiobank.getName());
         return t;
     };
 
-    private FhirApi fhirApi;
-
-    private FhirReporting fhirReporting;
-
-    private DirectoryApi directoryApi;
+    private final FhirApi fhirApi;
+    private final FhirReporting fhirReporting;
+    private final DirectoryApi directoryApi;
 
     public Sync(FhirApi fhirApi, FhirReporting fhirReporting, DirectoryApi directoryApi) {
         this.fhirApi = fhirApi;
@@ -40,16 +41,15 @@ public class Sync {
         this.directoryApi = directoryApi;
     }
 
-    private static OperationOutcome missigIdentifierOperationOutcome() {
+    private static OperationOutcome missingIdentifierOperationOutcome() {
         OperationOutcome outcome = new OperationOutcome();
-        outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics("No BBMRI Identifier for " +
-                "Organization");
+        outcome.addIssue().setSeverity(ERROR).setDiagnostics("No BBMRI Identifier for Organization");
         return outcome;
     }
 
     private static OperationOutcome noUpdateNecessaryOperationOutcome() {
         OperationOutcome outcome = new OperationOutcome();
-        outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.INFORMATION).setDiagnostics("No Update " +
+        outcome.addIssue().setSeverity(INFORMATION).setDiagnostics("No Update " +
                 "necessary");
         return outcome;
     }
@@ -97,7 +97,7 @@ public class Sync {
      */
     OperationOutcome updateBiobankOnFhirServerIfNecessary(Organization fhirBiobank) {
         return Option.ofOptional(FhirApi.BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank))
-                .toEither(missigIdentifierOperationOutcome())
+                .toEither(missingIdentifierOperationOutcome())
                 .flatMap(directoryApi::fetchBiobank)
                 .map(dirBiobank -> new BiobankTuple(fhirBiobank, dirBiobank))
                 .map(UPDATE_BIOBANK_NAME)
@@ -120,9 +120,9 @@ public class Sync {
 
     private static class BiobankTuple {
 
-        private Organization fhirBiobank;
-        private Organization fhirBiobankCopy;
-        private Biobank dirBiobank;
+        private final Organization fhirBiobank;
+        private final Organization fhirBiobankCopy;
+        private final Biobank dirBiobank;
 
         private BiobankTuple(Organization fhirBiobank, Biobank dirBiobank) {
             this.fhirBiobank = fhirBiobank;
