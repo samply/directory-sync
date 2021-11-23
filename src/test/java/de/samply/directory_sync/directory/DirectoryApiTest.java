@@ -1,5 +1,6 @@
 package de.samply.directory_sync.directory;
 
+import static de.samply.directory_sync.TestUtil.createBbmriEricId;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.singletonList;
 import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.INFORMATION;
@@ -42,15 +43,10 @@ class DirectoryApiTest {
 
   private static final String BASE_URL = "base-url-110950";
   private static final String TOKEN = "token-111037";
-
-  @SuppressWarnings("OptionalGetWithoutIsPresent")
-  private static final BbmriEricId AT_BIOBANK_ID = BbmriEricId.valueOf("bbmri-eric:ID:AT_MUG").get();
-
+  private static final BbmriEricId AT_BIOBANK_ID = createBbmriEricId("bbmri-eric:ID:AT_MUG");
   private static final String ERROR_MESSAGE = "error-message-132848";
-
-  @SuppressWarnings("OptionalGetWithoutIsPresent")
-  private static final BbmriEricId COLLECTION_ID = BbmriEricId.valueOf("bbmri-eric:ID:AT_MUG:collection:0").get();
-
+  private static final BbmriEricId COLLECTION_ID = createBbmriEricId(
+      "bbmri-eric:ID:AT_MUG:collection:0");
   private static final int COLLECTION_SIZE = 135807;
 
   @Mock
@@ -65,36 +61,36 @@ class DirectoryApiTest {
 
   @Test
   void fetchBiobank_Successful() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
-    when(httpClient.execute(argThat(httpGetMatcher(uri, TOKEN)))).thenReturn(response);
+    when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(200));
     when(response.getEntity()).thenReturn(httpEntity("{\"id\":\"" + AT_BIOBANK_ID + "\"}"));
 
-    Either<OperationOutcome, Biobank> biobank = api.fetchBiobank(AT_BIOBANK_ID);
+    Either<OperationOutcome, Biobank> result = api.fetchBiobank(AT_BIOBANK_ID);
 
-    assertTrue(biobank.isRight(), "the result is right");
-    assertEquals(AT_BIOBANK_ID, biobank.get().getId());
+    assertTrue(result.isRight(), "the result is right");
+    assertEquals(AT_BIOBANK_ID, result.get().getId());
   }
 
   @Test
   void fetchBiobank_NotFound() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
-    when(httpClient.execute(argThat(httpGetMatcher(uri, TOKEN)))).thenReturn(response);
+    when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(404));
 
-    Either<OperationOutcome, Biobank> biobank = api.fetchBiobank(AT_BIOBANK_ID);
+    Either<OperationOutcome, Biobank> result = api.fetchBiobank(AT_BIOBANK_ID);
 
-    assertTrue(biobank.isLeft(), "the result is left");
-    assertSame(NOTFOUND, biobank.getLeft().getIssueFirstRep().getCode());
+    assertTrue(result.isLeft(), "the result is left");
+    assertSame(NOTFOUND, result.getLeft().getIssueFirstRep().getCode());
   }
 
   @Test
   void fetchBiobank_ServerError() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
-    when(httpClient.execute(argThat(httpGetMatcher(uri, TOKEN)))).thenReturn(response);
+    when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(500));
     when(response.getEntity()).thenReturn(httpEntity(ERROR_MESSAGE));
 
@@ -107,8 +103,8 @@ class DirectoryApiTest {
 
   @Test
   void fetchBiobank_IOException() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
-    when(httpClient.execute(argThat(httpGetMatcher(uri, TOKEN))))
+    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    when(httpClient.execute(argThat(httpGetMatcher(uri))))
         .thenThrow(new IOException(ERROR_MESSAGE));
 
     Either<OperationOutcome, Biobank> biobank = api.fetchBiobank(AT_BIOBANK_ID);
@@ -120,11 +116,11 @@ class DirectoryApiTest {
 
   @Test
   void updateCollectionSizes_Successful() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_DE_collections/size";
+    String uri = "/api/v2/eu_bbmri_eric_DE_collections/size";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     String content = "{\"entities\":[{\"id\":\"" + COLLECTION_ID + "\",\"size\":" + COLLECTION_SIZE
         + "}]}";
-    when(httpClient.execute(argThat(httpPutMatcher(uri, TOKEN, content)))).thenReturn(response);
+    when(httpClient.execute(argThat(httpPutMatcher(uri, content)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(200));
 
     OperationOutcome outcome = api.updateCollectionSizes("DE",
@@ -135,11 +131,11 @@ class DirectoryApiTest {
 
   @Test
   void updateCollectionSizes_ServerError() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_DE_collections/size";
+    String uri = "/api/v2/eu_bbmri_eric_DE_collections/size";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     String content = "{\"entities\":[{\"id\":\"" + COLLECTION_ID + "\",\"size\":" + COLLECTION_SIZE
         + "}]}";
-    when(httpClient.execute(argThat(httpPutMatcher(uri, TOKEN, content)))).thenReturn(response);
+    when(httpClient.execute(argThat(httpPutMatcher(uri, content)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(500));
     when(response.getEntity()).thenReturn(httpEntity(ERROR_MESSAGE));
 
@@ -152,10 +148,10 @@ class DirectoryApiTest {
 
   @Test
   void updateCollectionSizes_IOException() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_DE_collections/size";
+    String uri = "/api/v2/eu_bbmri_eric_DE_collections/size";
     String content = "{\"entities\":[{\"id\":\"" + COLLECTION_ID + "\",\"size\":" + COLLECTION_SIZE
         + "}]}";
-    when(httpClient.execute(argThat(httpPutMatcher(uri, TOKEN, content))))
+    when(httpClient.execute(argThat(httpPutMatcher(uri, content))))
         .thenThrow(new IOException(ERROR_MESSAGE));
 
     OperationOutcome outcome = api.updateCollectionSizes("DE",
@@ -167,9 +163,9 @@ class DirectoryApiTest {
 
   @Test
   void listAllCollectionIds_Successful() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
+    String uri = "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
-    when(httpClient.execute(argThat(httpGetMatcher(uri, TOKEN)))).thenReturn(response);
+    when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(200));
     when(response.getEntity()).thenReturn(
         httpEntity("{\"items\":[{\"id\":\"" + COLLECTION_ID + "\"}]}"));
@@ -182,9 +178,9 @@ class DirectoryApiTest {
 
   @Test
   void listAllCollectionIds_ServerError() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
+    String uri = "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
-    when(httpClient.execute(argThat(httpGetMatcher(uri, TOKEN)))).thenReturn(response);
+    when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(500));
     when(response.getEntity()).thenReturn(httpEntity(ERROR_MESSAGE));
 
@@ -197,8 +193,8 @@ class DirectoryApiTest {
 
   @Test
   void listAllCollectionIds_IOException() throws IOException {
-    String uri = BASE_URL + "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
-    when(httpClient.execute(argThat(httpGetMatcher(uri, TOKEN))))
+    String uri = "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
+    when(httpClient.execute(argThat(httpGetMatcher(uri))))
         .thenThrow(new IOException(ERROR_MESSAGE));
 
     Either<OperationOutcome, Set<BbmriEricId>> ids = api.listAllCollectionIds("DE");
@@ -208,14 +204,14 @@ class DirectoryApiTest {
         ERROR_MESSAGE, ids.getLeft().getIssueFirstRep().getDiagnostics());
   }
 
-  private static ArgumentMatcher<HttpGet> httpGetMatcher(String uri, String token) {
-    return httpGet -> URI.create(uri).equals(httpGet.getURI()) &&
-        token.equals(httpGet.getFirstHeader("x-molgenis-token").getValue());
+  private static ArgumentMatcher<HttpGet> httpGetMatcher(String uri) {
+    return httpGet -> URI.create(BASE_URL + uri).equals(httpGet.getURI()) &&
+        TOKEN.equals(httpGet.getFirstHeader("x-molgenis-token").getValue());
   }
 
-  private static ArgumentMatcher<HttpPut> httpPutMatcher(String uri, String token, String content) {
-    return httpPut -> URI.create(uri).equals(httpPut.getURI()) &&
-        token.equals(httpPut.getFirstHeader("x-molgenis-token").getValue()) &&
+  private static ArgumentMatcher<HttpPut> httpPutMatcher(String uri, String content) {
+    return httpPut -> URI.create(BASE_URL + uri).equals(httpPut.getURI()) &&
+        TOKEN.equals(httpPut.getFirstHeader("x-molgenis-token").getValue()) &&
         contentEquals(httpPut.getEntity(), content);
   }
 

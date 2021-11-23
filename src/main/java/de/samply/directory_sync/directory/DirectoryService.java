@@ -6,6 +6,7 @@ import io.vavr.control.Either;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.hl7.fhir.r4.model.OperationOutcome;
@@ -15,7 +16,7 @@ public class DirectoryService {
   private final DirectoryApi api;
 
   public DirectoryService(DirectoryApi api) {
-    this.api = api;
+    this.api = Objects.requireNonNull(api);
   }
 
   public List<OperationOutcome> updateCollectionSizes(Map<BbmriEricId, Integer> collectionSizes) {

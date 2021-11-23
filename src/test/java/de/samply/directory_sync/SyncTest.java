@@ -1,5 +1,6 @@
 package de.samply.directory_sync;
 
+import static de.samply.directory_sync.TestUtil.createBbmriIdentifier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -14,7 +15,6 @@ import io.vavr.control.Either;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.OperationOutcome;
 import org.hl7.fhir.r4.model.Organization;
 import org.junit.jupiter.api.Test;
@@ -43,12 +43,6 @@ public class SyncTest {
 
   @InjectMocks
   private Sync sync;
-
-  public static Identifier createBbmriIdentifier(BbmriEricId value) {
-    Identifier identifier = new Identifier();
-    identifier.setSystem("http://www.bbmri-eric.eu/").setValue(value.toString());
-    return identifier;
-  }
 
   @Test
   void testUpdateCollectionSizes() {

@@ -5,6 +5,11 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * This class represents a BBMRI-ERIC identifier which has the following form:
+ * <p>
+ * {@literal bbmri-eric:ID:<country-code>_<suffix>}
+ */
 public class BbmriEricId {
 
   private static final Pattern PATTERN = Pattern.compile("bbmri-eric:ID:([A-Z]{2})(_.+)");
@@ -13,14 +18,26 @@ public class BbmriEricId {
   private final String suffix;
 
   private BbmriEricId(String countryCode, String suffix) {
-    this.countryCode = countryCode;
-    this.suffix = suffix;
+    this.countryCode = Objects.requireNonNull(countryCode);
+    this.suffix = Objects.requireNonNull(suffix);
   }
 
+  /**
+   * Returns the two-letter upper-case country code of this identifier.
+   *
+   * @return the two-letter upper-case country code of this identifier.
+   */
   public String getCountryCode() {
     return countryCode;
   }
 
+  /**
+   * Tries to create a BBMRI-ERIC identifier from string.
+   *
+   * @param s the string to parse.
+   * @return a BBMRI-ERIC identifier or {@link Optional#empty empty} if {@code s} doesn't represent
+   * a valid BBMRI-ERIC identifier
+   */
   public static Optional<BbmriEricId> valueOf(String s) {
     Matcher matcher = PATTERN.matcher(s);
     if (!matcher.matches()) {

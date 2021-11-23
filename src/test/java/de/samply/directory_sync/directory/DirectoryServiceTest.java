@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.when;
 
+import de.samply.directory_sync.Util;
 import de.samply.directory_sync.directory.DirectoryApi.CollectionSizeDto;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import io.vavr.control.Either;
@@ -53,7 +54,7 @@ class DirectoryServiceTest {
         .thenReturn(expectedOutcome);
 
     List<OperationOutcome> outcome = service.updateCollectionSizes(
-        mapOf(COLLECTION_ID, COLLECTION_SIZE));
+        Util.mapOf(COLLECTION_ID, COLLECTION_SIZE));
 
     assertEquals(singletonList(expectedOutcome), outcome);
   }
@@ -64,7 +65,8 @@ class DirectoryServiceTest {
     OperationOutcome expectedOutcome = new OperationOutcome();
     when(api.updateCollectionSizes(COUNTRY_CODE, emptyList())).thenReturn(expectedOutcome);
 
-    List<OperationOutcome> outcome = service.updateCollectionSizes(mapOf(COLLECTION_ID, COLLECTION_SIZE));
+    List<OperationOutcome> outcome = service.updateCollectionSizes(
+        Util.mapOf(COLLECTION_ID, COLLECTION_SIZE));
 
     assertEquals(singletonList(expectedOutcome), outcome);
   }
@@ -88,15 +90,10 @@ class DirectoryServiceTest {
     OperationOutcome error = new OperationOutcome();
     when(api.listAllCollectionIds(COUNTRY_CODE)).thenReturn(Either.left(error));
 
-    List<OperationOutcome> outcome = service.updateCollectionSizes(mapOf(COLLECTION_ID, COLLECTION_SIZE));
+    List<OperationOutcome> outcome = service.updateCollectionSizes(
+        Util.mapOf(COLLECTION_ID, COLLECTION_SIZE));
 
     assertEquals(singletonList(error), outcome);
-  }
-
-  private static <K, V> Map<K, V> mapOf(K key, V value) {
-    HashMap<K, V> map = new HashMap<>();
-    map.put(key, value);
-    return map;
   }
 
   private static <K, V> Map<K, V> mapOf(K k1, V v1, K k2, V v2) {
