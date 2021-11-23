@@ -76,7 +76,7 @@ public class Sync {
      * @return the {@link OperationOutcome} from the FHIR server update
      */
     OperationOutcome updateBiobankOnFhirServerIfNecessary(Organization fhirBiobank) {
-        return Option.ofOptional(FhirApi.BBMRI_ERIC_IDENTIFIER.apply(fhirBiobank))
+        return Option.ofOptional(FhirApi.bbmriEricId(fhirBiobank))
                 .toEither(missingIdentifierOperationOutcome())
                 .flatMap(directoryApi::fetchBiobank)
                 .map(dirBiobank -> new BiobankTuple(fhirBiobank, dirBiobank))
@@ -92,10 +92,10 @@ public class Sync {
      *
      * @return the outcome of the directory update operation.
      */
-    public OperationOutcome syncCollectionSizesToDirectory() {
+    public List<OperationOutcome> syncCollectionSizesToDirectory() {
         return fhirReporting.fetchCollectionSizes()
                 .map(directoryService::updateCollectionSizes)
-                .fold(Function.identity(), Function.identity());
+                .fold(Collections::singletonList, Function.identity());
     }
 
     private static class BiobankTuple {

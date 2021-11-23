@@ -43,13 +43,13 @@ public class Biobank {
 
     }
 
-
-    public String getId() {
-        return id;
+    @SuppressWarnings("OptionalGetWithoutIsPresent")
+    public BbmriEricId getId() {
+        return BbmriEricId.valueOf(id).get();
     }
 
-    public void setId(String id) {
-        this.id = id;
+    public void setId(BbmriEricId id) {
+        this.id = id.toString();
     }
 
     public String getName() {
