@@ -130,7 +130,8 @@ public class DirectoryApi {
   }
 
   private HttpGet fetchBiobankRequest(BbmriEricId id) {
-    HttpGet request = new HttpGet(urlPrefix(id.getCountryCode()) + "_biobanks/" + id);
+    HttpGet request = new HttpGet(
+        baseUrl + "/api/v2/eu_bbmri_eric_biobanks/" + id.toString());
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     return request;
@@ -165,7 +166,8 @@ public class DirectoryApi {
 
   private HttpPut updateCollectionSizesRequest(String countryCode,
       List<CollectionSizeDto> collectionSizeDtos) {
-    HttpPut request = new HttpPut(urlPrefix(countryCode) + "_collections/size");
+    HttpPut request = new HttpPut(
+        baseUrl + "/api/v2/eu_bbmri_eric_collections/size");
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     request.setHeader("Content-type", "application/json");
@@ -195,8 +197,9 @@ public class DirectoryApi {
     // gets them all. Note that in the current Directory implementation
     // (12.10.2021), the maximum allowed value of "num" is 10000.
     // TODO: to really get all collections, we have to implement paging
-    HttpGet request = new HttpGet(urlPrefix(countryCode) +
-        "_collections?attrs=id&start=0&num=10000");
+    HttpGet request = new HttpGet(
+        baseUrl + "/api/v2/eu_bbmri_eric_collections?attrs=id&start=0&num=10000&q=country=="
+            + countryCode);
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     return request;

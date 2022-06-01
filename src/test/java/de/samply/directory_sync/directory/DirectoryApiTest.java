@@ -61,7 +61,7 @@ class DirectoryApiTest {
 
   @Test
   void fetchBiobank_Successful() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    String uri = "/api/v2/eu_bbmri_eric_biobanks/" + AT_BIOBANK_ID;
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(200));
@@ -75,7 +75,7 @@ class DirectoryApiTest {
 
   @Test
   void fetchBiobank_NotFound() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    String uri = "/api/v2/eu_bbmri_eric_biobanks/" + AT_BIOBANK_ID;
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(404));
@@ -88,7 +88,7 @@ class DirectoryApiTest {
 
   @Test
   void fetchBiobank_ServerError() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    String uri = "/api/v2/eu_bbmri_eric_biobanks/" + AT_BIOBANK_ID;
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(500));
@@ -103,7 +103,7 @@ class DirectoryApiTest {
 
   @Test
   void fetchBiobank_IOException() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_AT_biobanks/" + AT_BIOBANK_ID;
+    String uri = "/api/v2/eu_bbmri_eric_biobanks/" + AT_BIOBANK_ID;
     when(httpClient.execute(argThat(httpGetMatcher(uri))))
         .thenThrow(new IOException(ERROR_MESSAGE));
 
@@ -116,7 +116,7 @@ class DirectoryApiTest {
 
   @Test
   void updateCollectionSizes_Successful() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_DE_collections/size";
+    String uri = "/api/v2/eu_bbmri_eric_collections/size";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     String content = "{\"entities\":[{\"id\":\"" + COLLECTION_ID + "\",\"size\":" + COLLECTION_SIZE
         + "}]}";
@@ -131,7 +131,7 @@ class DirectoryApiTest {
 
   @Test
   void updateCollectionSizes_ServerError() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_DE_collections/size";
+    String uri = "/api/v2/eu_bbmri_eric_collections/size";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     String content = "{\"entities\":[{\"id\":\"" + COLLECTION_ID + "\",\"size\":" + COLLECTION_SIZE
         + "}]}";
@@ -148,7 +148,7 @@ class DirectoryApiTest {
 
   @Test
   void updateCollectionSizes_IOException() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_DE_collections/size";
+    String uri = "/api/v2/eu_bbmri_eric_collections/size";
     String content = "{\"entities\":[{\"id\":\"" + COLLECTION_ID + "\",\"size\":" + COLLECTION_SIZE
         + "}]}";
     when(httpClient.execute(argThat(httpPutMatcher(uri, content))))
@@ -163,7 +163,7 @@ class DirectoryApiTest {
 
   @Test
   void listAllCollectionIds_Successful() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
+    String uri = "/api/v2/eu_bbmri_eric_collections?attrs=id&start=0&num=10000&q=country==DE";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(200));
@@ -178,7 +178,7 @@ class DirectoryApiTest {
 
   @Test
   void listAllCollectionIds_ServerError() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
+    String uri = "/api/v2/eu_bbmri_eric_collections?attrs=id&start=0&num=10000&q=country==DE";
     CloseableHttpResponse response = mock(CloseableHttpResponse.class);
     when(httpClient.execute(argThat(httpGetMatcher(uri)))).thenReturn(response);
     when(response.getStatusLine()).thenReturn(statusLine(500));
@@ -193,7 +193,7 @@ class DirectoryApiTest {
 
   @Test
   void listAllCollectionIds_IOException() throws IOException {
-    String uri = "/api/v2/eu_bbmri_eric_DE_collections?attrs=id&start=0&num=10000";
+    String uri = "/api/v2/eu_bbmri_eric_collections?attrs=id&start=0&num=10000&q=country==DE";
     when(httpClient.execute(argThat(httpGetMatcher(uri))))
         .thenThrow(new IOException(ERROR_MESSAGE));
 
