@@ -131,7 +131,7 @@ public class DirectoryApi {
 
   private HttpGet fetchBiobankRequest(BbmriEricId id) {
     HttpGet request = new HttpGet(
-        baseUrl + "/api/v2/eu_bbmri_eric_biobanks/" + id.toString());
+        baseUrl + "/api/v2/eu_bbmri_eric_biobanks/" + id);
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     return request;
