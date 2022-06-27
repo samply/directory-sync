@@ -1,0 +1,50 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Specimen",
+        "id": "0",
+        "meta": {
+          "profile": [
+            "https://fhir.bbmri.de/StructureDefinition/Specimen"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.bbmri.de/StructureDefinition/Custodian",
+            "valueReference": {
+              "reference": "Organization/0"
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Specimen/0"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Organization",
+        "id": "0",
+        "meta": {
+          "profile": [
+            "https://fhir.bbmri.de/StructureDefinition/Biobank"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://www.bbmri-eric.eu/",
+            "value": "bbmri-eric:ID:DE_185943"
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Organization/0"
+      }
+    }
+  ]
+}
