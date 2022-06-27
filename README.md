@@ -2,6 +2,14 @@
 
 # Directory Sync
 
+The Directory-sync library is designed to synchronize between a FHIR store associated with a biobank and a Directory, such as the (BBMRI Directory)[https://directory.bbmri-eric.eu]. This is a two-way process, information is extracted from the FHIR store and sent to the Directory, and information is pulled from the Directory and inserted into the FHIR store. For this to work, the data in the FHIR store should conform to the (BBMRI Profile)[https://simplifier.net/bbmri.de].
+
+This is meant to make the lives of biobank administrators a little easier, since they must currently perform this synchronization by hand.
+
+At the time of writing (10.12.2021), only the sample counts per collection are sent to the Directory. Only Biobank name and responsible people are retrieved from the Directory. In order to make this library really useful to biobank administrators, it would be good if lists of ICD 10 codes used in the collections could also be pushed to the Directory, but this functionality does not yet exist.
+
+The library was written to be used from within the (Connector)[https://github.com/samply/share-client]. However, it could be used from within any component that needs Directory-sync functionality.
+
 Based on the mapping from https://samply.github.io/bbmri-fhir-ig/mappings.html.
 
 ## Usage
