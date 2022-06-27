@@ -1,0 +1,248 @@
+{
+  "extension": [
+    {
+      "url": "https://samply.github.io/blaze/fhir/StructureDefinition/eval-duration",
+      "valueQuantity": {
+        "value": 0.020411375,
+        "unit": "s",
+        "system": "http://unitsofmeasure.org",
+        "code": "s"
+      }
+    }
+  ],
+  "status": "complete",
+  "type": "summary",
+  "measure": "https://fhir.bbmri.de/Measure/collection-size",
+  "date": "2021-11-23T16:13:19.345350219Z",
+  "period": {
+    "start": "1900",
+    "end": "2100"
+  },
+  "group": [
+    {
+      "population": [
+        {
+          "count": 988,
+          "code": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                "code": "initial-population"
+              }
+            ]
+          }
+        }
+      ],
+      "stratifier": [
+        {
+          "stratum": [
+            {
+              "value": {
+                "text": "Organization/collection-0"
+              },
+              "population": [
+                {
+                  "count": 99,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-1"
+              },
+              "population": [
+                {
+                  "count": 109,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-2"
+              },
+              "population": [
+                {
+                  "count": 90,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-3"
+              },
+              "population": [
+                {
+                  "count": 82,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-4"
+              },
+              "population": [
+                {
+                  "count": 103,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-5"
+              },
+              "population": [
+                {
+                  "count": 100,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-6"
+              },
+              "population": [
+                {
+                  "count": 92,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-7"
+              },
+              "population": [
+                {
+                  "count": 102,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-8"
+              },
+              "population": [
+                {
+                  "count": 113,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "Organization/collection-9"
+              },
+              "population": [
+                {
+                  "count": 97,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "value": {
+                "text": "null"
+              },
+              "population": [
+                {
+                  "count": 1,
+                  "code": {
+                    "coding": [
+                      {
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": "initial-population"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "code": [
+            {
+              "text": "Collection"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "resourceType": "MeasureReport"
+}
