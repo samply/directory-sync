@@ -60,7 +60,7 @@ public class Sync {
         System.out.println("collectionSizes = " + collectionSizes);
     }
 
-    private Either<String, Void> initResources() {
+    public Either<String, Void> initResources() {
         return fhirReporting.initLibrary().flatMap(_void -> fhirReporting.initMeasure());
     }
 
