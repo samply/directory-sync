@@ -35,7 +35,8 @@ public class DirectoryApi {
   private DirectoryApi(CloseableHttpClient httpClient, String baseUrl, String token) {
     this.httpClient = Objects.requireNonNull(httpClient);
     this.baseUrl = Objects.requireNonNull(baseUrl);
-    this.token = Objects.requireNonNull(token);
+//    this.token = Objects.requireNonNull(token);
+    this.token = token;
   }
 
   public static Either<OperationOutcome, DirectoryApi> createWithLogin(

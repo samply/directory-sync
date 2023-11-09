@@ -117,6 +117,13 @@ public class Sync {
                 .fold(Collections::singletonList, Function.identity());
     }
 
+    public List<OperationOutcome> test() {
+        System.out.println("syncCollectionSizesToDirectory: entered");
+        Either<OperationOutcome, Map<BbmriEricId, Integer>> collectionSizes = fhirReporting.fetchCollectionSizes();
+        System.out.println("syncCollectionSizesToDirectory: done");
+        return Collections.singletonList(new OperationOutcome());
+    }
+
     private static class BiobankTuple {
 
         private final Organization fhirBiobank;
