@@ -5,10 +5,15 @@ import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import de.samply.directory_sync.directory.DirectoryApi;
 import de.samply.directory_sync.directory.DirectoryService;
+import de.samply.directory_sync.directory.MergeDirectoryCollectionGetToDirectoryCollectionPut;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import de.samply.directory_sync.directory.model.Biobank;
+import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
+import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
+import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
 import de.samply.directory_sync.fhir.FhirApi;
 import de.samply.directory_sync.fhir.FhirReporting;
+import de.samply.directory_sync.fhir.model.FhirCollection;
 import io.vavr.control.Either;
 import io.vavr.control.Option;
 import java.util.Map;
@@ -16,6 +21,10 @@ import java.util.Objects;
 import org.apache.http.impl.client.HttpClients;
 import org.hl7.fhir.r4.model.OperationOutcome;
 import org.hl7.fhir.r4.model.Organization;
+import org.hl7.fhir.r4.model.Patient;
+import org.hl7.fhir.r4.model.Specimen;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -30,6 +39,7 @@ import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.INFORMATION;
  * Provides functionality to synchronize MOLGENIS directory and FHIR server in both directions.
  */
 public class Sync {
+  private static final Logger logger = LoggerFactory.getLogger(Sync.class);
 
     private static final Function<BiobankTuple, BiobankTuple> UPDATE_BIOBANK_NAME = t -> {
         t.fhirBiobank.setName(t.dirBiobank.getName());
@@ -117,11 +127,57 @@ public class Sync {
                 .fold(Collections::singletonList, Function.identity());
     }
 
-    public List<OperationOutcome> test() {
-        System.out.println("syncCollectionSizesToDirectory: entered");
-        Either<OperationOutcome, Map<BbmriEricId, Integer>> collectionSizes = fhirReporting.fetchCollectionSizes();
-        System.out.println("syncCollectionSizesToDirectory: done");
-        return Collections.singletonList(new OperationOutcome());
+    public List<OperationOutcome> sendUpdatesToDirectory(String defaultCollectionId, String country) {
+
+        // Testing stuff out...
+        // This is a multi step process:
+        // 1. Fetch a list of collections objects from the FHIR store. These contain aggregated
+        //    information over all specimens in the collections.
+        // 2. Convert the FHIR collection objects into Directory collection PUT DTOs. Copy
+        //    over avaialble information from FHIT, converting where necessary.
+        // 3. Using the collection IDs found in the FHIR store, send queries to the Directory
+        //    and fetch back the relevant GET collections. If any of the collection IDs cannot be
+        //    found, this ie a breaking error.
+        // 4. Transfer data from the Directory GET collections to the corresponding Directory PUT
+        //    collections.
+        // 5. Push the new information back to the Directory.
+        DirectoryCollectionPut directoryCollectionPut = null;
+        try {
+            Either<OperationOutcome, List<FhirCollection>> fhirCollectionOutcomes = fhirReporting.fetchFhirCollections(defaultCollectionId);
+            if (fhirCollectionOutcomes.isRight()) {
+                directoryCollectionPut = FhirCollectionToDirectoryCollectionPutConverter.convert(fhirCollectionOutcomes.get());
+                if (directoryCollectionPut == null) {
+                    OperationOutcome outcome = new OperationOutcome();
+                    outcome.addIssue().setSeverity(ERROR).setDiagnostics("Problem converting FHIR attributes to Directory attributes");
+                    return Collections.singletonList(outcome);
+                }
+                List<String> collectionIds = directoryCollectionPut.getCollectionIds();
+                Either<OperationOutcome, DirectoryCollectionGet> directoryCollectionGetOutcomes = directoryService.fetchDirectoryCollectionGetOutcomes(country, collectionIds);
+                if (directoryCollectionGetOutcomes.isRight()) {
+                    if (MergeDirectoryCollectionGetToDirectoryCollectionPut.merge(directoryCollectionGetOutcomes.get(), directoryCollectionPut) == null) {
+                        OperationOutcome outcome = new OperationOutcome();
+                        outcome.addIssue().setSeverity(ERROR).setDiagnostics("Problem merging Directory GET attributes to Directory PUT attributes");
+                        return Collections.singletonList(outcome);
+                    }
+                    logger.info("sendUpdatesToDirectory: ");
+                    List<OperationOutcome> result = directoryService.updateEntities(country, directoryCollectionPut); // Update Directory
+                    logger.info("sendUpdatesToDirectory: ");
+                    return(result);
+            } else {
+                    OperationOutcome outcome = new OperationOutcome();
+                    outcome.addIssue().setSeverity(ERROR).setDiagnostics("Problem getting collections from Directory");
+                    return Collections.singletonList(outcome);
+                }
+            } else {
+                OperationOutcome outcome = new OperationOutcome();
+                outcome.addIssue().setSeverity(ERROR).setDiagnostics("Problem getting collections from FHIR store");
+                return Collections.singletonList(outcome);
+            }
+        } catch(Exception e) {
+            OperationOutcome outcome = new OperationOutcome();
+            outcome.addIssue().setSeverity(ERROR).setDiagnostics(Util.traceFromException(e));
+            return Collections.singletonList(outcome);
+        }
     }
 
     private static class BiobankTuple {

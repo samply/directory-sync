@@ -1,5 +1,7 @@
 package de.samply.directory_sync.directory;
 
+import de.samply.directory_sync.Util;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.ERROR;
 import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.INFORMATION;
@@ -7,15 +9,23 @@ import static org.hl7.fhir.r4.model.OperationOutcome.IssueType.NOTFOUND;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import de.samply.directory_sync.directory.model.Biobank;
+import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
+import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
+import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
+import de.samply.directory_sync.fhir.FhirReporting;
 import io.vavr.control.Either;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -24,8 +34,11 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.hl7.fhir.r4.model.OperationOutcome;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DirectoryApi {
+  private static final Logger logger = LoggerFactory.getLogger(DirectoryApi.class);
 
   private final CloseableHttpClient httpClient;
   private final String baseUrl;
@@ -35,8 +48,7 @@ public class DirectoryApi {
   private DirectoryApi(CloseableHttpClient httpClient, String baseUrl, String token) {
     this.httpClient = Objects.requireNonNull(httpClient);
     this.baseUrl = Objects.requireNonNull(baseUrl);
-//    this.token = Objects.requireNonNull(token);
-    this.token = token;
+    this.token = Objects.requireNonNull(token);
   }
 
   public static Either<OperationOutcome, DirectoryApi> createWithLogin(
@@ -132,7 +144,7 @@ public class DirectoryApi {
 
   private HttpGet fetchBiobankRequest(BbmriEricId id) {
     HttpGet request = new HttpGet(
-        baseUrl + "/api/v2/eu_bbmri_eric_biobanks/" + id);
+        baseUrl + "/api/v2/eu_bbmri_eric_" + id.getCountryCode() + "_biobanks/" + id);
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     return request;
@@ -158,10 +170,10 @@ public class DirectoryApi {
       if (response.getStatusLine().getStatusCode() < 300) {
         return updateSuccessful(collectionSizeDtos.size());
       } else {
-        return error("collection size update", EntityUtils.toString(response.getEntity(), UTF_8));
+        return error("collection size update status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
       }
     } catch (IOException e) {
-      return error("collection size update", e.getMessage());
+      return error("collection size update exception", e.getMessage());
     }
   }
 
@@ -204,6 +216,90 @@ public class DirectoryApi {
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     return request;
+  }
+
+  public Either<OperationOutcome, DirectoryCollectionGet> fetchCollectionGetOutcomes(String country, List<String> collectionIds) {
+    DirectoryCollectionGet items = new DirectoryCollectionGet();
+    items.init();
+    for (String collectionId: collectionIds) {
+      try {
+        HttpGet request = fetchCollectionsRequest(country, collectionId);
+
+        CloseableHttpResponse response = httpClient.execute(request);
+        if (response.getStatusLine().getStatusCode() < 300) {
+          HttpEntity httpEntity = response.getEntity();
+          String json = EntityUtils.toString(httpEntity);
+          DirectoryCollectionGet collectionItems = gson.fromJson(json, DirectoryCollectionGet.class);
+          items.getItems().add(collectionItems.getItemZero());
+        } else
+          return Either.left(error("entity get HTTP error", Integer.toString(response.getStatusLine().getStatusCode())));
+      } catch (IOException e) {
+          return Either.left(error("entity get exception", Util.traceFromException(e)));
+      } catch (Exception e) {
+          return Either.left(error("unknown exception", Util.traceFromException(e)));
+      }
+    }
+
+    return Either.right(items);
+  }
+
+  private HttpGet fetchCollectionsRequest(String country, String collectionId) {
+    String url = buildCollectionApiUrl(country) + "?q=id==%22" + collectionId  + "%22";
+
+    HttpGet request = new HttpGet(url);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+
+    logger.info("DirectoryApi.fetchCollectionsRequest: request successfully built");
+
+    return request;
+  }
+
+  /**
+   * Send the collection entities to the Directory.
+   * <p>
+   * You need 'update data' permission on entity type
+   * 'Collections' at the Directory in order for this to work.
+   *
+   * @param countryCode
+   * @param entities    the individual entities.
+   * @return an outcome, either successful or an error
+   */
+  public OperationOutcome updateEntitiesNew(String country, DirectoryCollectionPut directoryCollectionPut) {
+    HttpPut request = updateEntitiesRequestNew(country, directoryCollectionPut);
+
+    try (CloseableHttpResponse response = httpClient.execute(request)) {
+      if (response.getStatusLine().getStatusCode() < 300) {
+        return updateSuccessful(directoryCollectionPut.size());
+      } else {
+        return error("entity update status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
+      }
+    } catch (IOException e) {
+      return error("entity update exception", e.getMessage());
+    }
+  }
+
+  private HttpPut updateEntitiesRequestNew(String country, DirectoryCollectionPut directoryCollectionPut) {
+    HttpPut request = new HttpPut(buildCollectionApiUrl(country));
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    request.setEntity(new StringEntity(gson.toJson(directoryCollectionPut), UTF_8));
+    return request;
+  }
+
+  private String buildCollectionApiUrl(String country) {
+    return (constructCollectionApiUrl(Util.deriveCountryCodeFromCountry(country)));
+  }
+
+  private String constructCollectionApiUrl(String countryCode) {
+    String countryCodeInsert = "";
+    if (countryCode != null && !countryCode.isEmpty())
+      countryCodeInsert = countryCode + "_";
+    String collectionApiUrl = baseUrl + "/api/v2/eu_bbmri_eric_" + countryCodeInsert + "collections";
+
+    return collectionApiUrl;
   }
 
   private Either<OperationOutcome, ItemsDto<IdDto>> fetchIdItems(HttpGet request, String action) {

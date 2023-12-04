@@ -2,8 +2,12 @@ package de.samply.directory_sync.directory;
 
 import de.samply.directory_sync.directory.DirectoryApi.CollectionSizeDto;
 import de.samply.directory_sync.directory.model.BbmriEricId;
+import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
+import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
+import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
 import io.vavr.control.Either;
-import java.util.HashMap;
+
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -48,5 +52,14 @@ public class DirectoryService {
         .collect(Collectors.toList());
 
     return api.updateCollectionSizes(countryCode, collectionSizeDtos);
+  }
+
+  public List<OperationOutcome> updateEntities(String country, DirectoryCollectionPut directoryCollectionPut) {
+    OperationOutcome operationOutcome = api.updateEntitiesNew(country, directoryCollectionPut);
+    return Collections.singletonList(operationOutcome);
+  }
+  
+  public Either<OperationOutcome, DirectoryCollectionGet> fetchDirectoryCollectionGetOutcomes(String country, List<String> collectionIds) {
+    return(api.fetchCollectionGetOutcomes(country, collectionIds));
   }
 }
