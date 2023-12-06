@@ -219,9 +219,18 @@ public class DirectoryApi {
     return request;
   }
 
+  /**
+   * Make API calls to the Directory to get a DirectoryCollectionGet object containing attributes
+   * for all of the collections listed in collectionIds. The countryCode is used solely for
+   * constructing the URL for the API call.
+   * 
+   * @param countryCode
+   * @param collectionIds
+   * @return
+   */
   public Either<OperationOutcome, DirectoryCollectionGet> fetchCollectionGetOutcomes(String countryCode, List<String> collectionIds) {
-    DirectoryCollectionGet items = new DirectoryCollectionGet();
-    items.init();
+    DirectoryCollectionGet directoryCollectionGet = new DirectoryCollectionGet(); // for all collections retrieved from Directory
+    directoryCollectionGet.init(); 
     for (String collectionId: collectionIds) {
       try {
         HttpGet request = fetchCollectionsRequest(countryCode, collectionId);
@@ -230,11 +239,11 @@ public class DirectoryApi {
         if (response.getStatusLine().getStatusCode() < 300) {
           HttpEntity httpEntity = response.getEntity();
           String json = EntityUtils.toString(httpEntity);
-          DirectoryCollectionGet collectionItems = gson.fromJson(json, DirectoryCollectionGet.class);
-          Map item = collectionItems.getItemZero();
+          DirectoryCollectionGet singleDirectoryCollectionGet = gson.fromJson(json, DirectoryCollectionGet.class);
+          Map item = singleDirectoryCollectionGet.getItemZero(); // assume that only one collection matches collectionId
           if (item == null)
             	return Either.left(error("entity get item is null, does the collection exist in the Directory: ", collectionId));
-          items.getItems().add(item);
+          directoryCollectionGet.getItems().add(item);
         } else
           return Either.left(error("entity get HTTP error", Integer.toString(response.getStatusLine().getStatusCode())));
       } catch (IOException e) {
@@ -244,7 +253,7 @@ public class DirectoryApi {
       }
     }
 
-    return Either.right(items);
+    return Either.right(directoryCollectionGet);
   }
 
   private HttpGet fetchCollectionsRequest(String countryCode, String collectionId) {

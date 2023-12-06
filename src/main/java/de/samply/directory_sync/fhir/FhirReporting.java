@@ -189,28 +189,35 @@ public class FhirReporting {
         });
   }
 
+  /**
+   * Pulls information relevant to collections from the FHIR store.
+   * 
+   * Returns a list of FhirCollection objects, one per collection.
+   * 
+   * @param defaultBbmriEricCollectionId
+   * @return
+   */
   public Either<OperationOutcome, List<FhirCollection>> fetchFhirCollections(BbmriEricId defaultBbmriEricCollectionId) {
+    Map<String,FhirCollection> fhirCollectionMap = new HashMap<String,FhirCollection>();
+
+    // Group specimens according to collection, extract aggregated information
+    // from each group, and put this information into FhirCollection objects.
     Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollectionOutcome = fhirApi.fetchSpecimensByCollection(defaultBbmriEricCollectionId);
-    
-    if (specimensByCollectionOutcome.isRight()) {
-        Map<String,FhirCollection> entities = new HashMap<String,FhirCollection>();
+    if (specimensByCollectionOutcome.isLeft())
+      return Either.left(createOutcomeWithError("Problem finding specimens"));
+    updateFhirCollectionsWithSpecimenData(fhirCollectionMap, specimensByCollectionOutcome.get());
 
-        updateEntitiesWithSpecimenData(entities, specimensByCollectionOutcome.get());
+    // Group patients according to collection, extract aggregated information
+    // from each group, and put this information into FhirCollection objects.
+    Either<OperationOutcome, Map<String, List<Patient>>> patientsByCollectionOutcome = fhirApi.fetchPatientsByCollection(specimensByCollectionOutcome.get());
+    if (patientsByCollectionOutcome.isLeft()) 
+      return Either.left(createOutcomeWithError("Problem finding patients"));
+    updateFhirCollectionsWithPatientData(fhirCollectionMap, patientsByCollectionOutcome.get());
 
-        Either<OperationOutcome, Map<String, List<Patient>>> patientsByCollectionOutcome = fhirApi.fetchPatientsByCollection(specimensByCollectionOutcome.get());
-
-        if (patientsByCollectionOutcome.isRight()) {
-            updateEntitiesWithPatientData(entities, patientsByCollectionOutcome.get());
-            return Either.right(new ArrayList<FhirCollection>(entities.values()));
-        } else {
-            return Either.left(createOutcomeWithError("Problem finding patients"));
-        }
-    } else {
-        return Either.left(createOutcomeWithError("Problem finding specimens"));
-    }
+    return Either.right(new ArrayList<FhirCollection>(fhirCollectionMap.values()));
 }
 
-private void updateEntitiesWithSpecimenData(Map<String,FhirCollection> entities, Map<String, List<Specimen>> specimensByCollection) {
+private void updateFhirCollectionsWithSpecimenData(Map<String,FhirCollection> entities, Map<String, List<Specimen>> specimensByCollection) {
     for (String key: specimensByCollection.keySet()) {
         List<Specimen> specimenList = specimensByCollection.get(key);
         FhirCollection fhirCollection = entities.getOrDefault(key, new FhirCollection());
@@ -223,7 +230,7 @@ private void updateEntitiesWithSpecimenData(Map<String,FhirCollection> entities,
     }
 }
 
-private void updateEntitiesWithPatientData(Map<String,FhirCollection> entities, Map<String, List<Patient>> patientsByCollection) {
+private void updateFhirCollectionsWithPatientData(Map<String,FhirCollection> entities, Map<String, List<Patient>> patientsByCollection) {
     for (String key: patientsByCollection.keySet()) {
         List<Patient> patientList = patientsByCollection.get(key);
         FhirCollection fhirCollection = entities.getOrDefault(key, new FhirCollection());

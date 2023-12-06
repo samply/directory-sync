@@ -228,26 +228,6 @@ public class FhirApi {
   }
 
   /**
-   * Fetches the Specimen resources available.
-   *
-   * @return List of Specimen Resources or OperationOutcome in case of failure.
-   */
-  Either<Object, List<Specimen>> fetchSpecimens() {
-    try {
-      Bundle response = (Bundle) fhirClient.search().forResource(Specimen.class).execute();
-
-      return Either.right(response.getEntry().stream()
-              .filter(e -> ResourceType.Specimen == e.getResource().getResourceType())
-              .map(e -> (Specimen) e.getResource())
-              .collect(Collectors.toList()));
-    } catch (Exception e) {
-      OperationOutcome outcome = new OperationOutcome();
-      outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics(e.getMessage());
-      return Either.left(outcome);
-    }
-  }
-
-  /**
    * Fetches specimens from the FHIR server and groups them by their collection id.
    * If no default collection id is provided, tries to find one from the available collections.
    * If the default collection id is invalid or not found, removes the specimens without a collection id from the result.
@@ -417,12 +397,6 @@ public class FhirApi {
         break;
       }
     }
-
-    return collectionId;
-  }
-
-  private String extractCollectionIdFromCollection(Organization collection) {
-    String collectionId = collection.getId().replaceFirst(".*Organization/", "").replaceFirst("/.*", "");
 
     return collectionId;
   }

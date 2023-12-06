@@ -9,9 +9,26 @@ import de.samply.directory_sync.Util;
 import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
 import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
 
+/**
+ * Takes information from a DirectoryCollectionGet object and inserts it into
+ * a preexisting DirectoryCollectionPut object.
+ * 
+ * Both objects should contain lists of collections with identical IDs.
+ */
 public class MergeDirectoryCollectionGetToDirectoryCollectionPut {
   private static final Logger logger = LoggerFactory.getLogger(MergeDirectoryCollectionGetToDirectoryCollectionPut.class);
 
+  /**
+   * Merges collection information from a DirectoryCollectionGet object into a
+   * DirectoryCollectionPut object.
+   * 
+   * Returns false if there is a problem, e.g. if there are discrepancies between
+   * the collection IDs in the two objects.
+   * 
+   * @param directoryCollectionGet
+   * @param directoryCollectionPut
+   * @return
+   */
   public static boolean merge(DirectoryCollectionGet directoryCollectionGet, DirectoryCollectionPut directoryCollectionPut) {
     List<String> collectionIds = directoryCollectionPut.getCollectionIds();
     for (String collectionId: collectionIds)
