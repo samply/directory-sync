@@ -9,8 +9,18 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import de.samply.directory_sync.fhir.model.FhirCollection;
-
+/**
+ * This is a data transfer object that maps onto the JSON returned by a GET request
+ * to the Directory API when you want to obtain information about collections.
+ * 
+ * It simply extends a Map and adds a single key, "items". This contains a list
+ * of collections. Each collection is also a Map, with keys corresponding to the
+ * various attributes needed when updating, such as collection name or ID.
+ * 
+ * The getter methods allow you to get attributes in collections identified by
+ * collection ID. If you use an ID that is not known, you will get a null pointer
+ * exception.
+ */
 public class DirectoryCollectionGet extends HashMap {
     private static final Logger logger = LoggerFactory.getLogger(DirectoryCollectionGet.class);
 

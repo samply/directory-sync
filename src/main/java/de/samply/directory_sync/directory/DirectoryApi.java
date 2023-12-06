@@ -20,6 +20,7 @@ import io.vavr.control.Either;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -218,19 +219,22 @@ public class DirectoryApi {
     return request;
   }
 
-  public Either<OperationOutcome, DirectoryCollectionGet> fetchCollectionGetOutcomes(String country, List<String> collectionIds) {
+  public Either<OperationOutcome, DirectoryCollectionGet> fetchCollectionGetOutcomes(String countryCode, List<String> collectionIds) {
     DirectoryCollectionGet items = new DirectoryCollectionGet();
     items.init();
     for (String collectionId: collectionIds) {
       try {
-        HttpGet request = fetchCollectionsRequest(country, collectionId);
+        HttpGet request = fetchCollectionsRequest(countryCode, collectionId);
 
         CloseableHttpResponse response = httpClient.execute(request);
         if (response.getStatusLine().getStatusCode() < 300) {
           HttpEntity httpEntity = response.getEntity();
           String json = EntityUtils.toString(httpEntity);
           DirectoryCollectionGet collectionItems = gson.fromJson(json, DirectoryCollectionGet.class);
-          items.getItems().add(collectionItems.getItemZero());
+          Map item = collectionItems.getItemZero();
+          if (item == null)
+            	return Either.left(error("entity get item is null, does the collection exist in the Directory: ", collectionId));
+          items.getItems().add(item);
         } else
           return Either.left(error("entity get HTTP error", Integer.toString(response.getStatusLine().getStatusCode())));
       } catch (IOException e) {
@@ -243,8 +247,8 @@ public class DirectoryApi {
     return Either.right(items);
   }
 
-  private HttpGet fetchCollectionsRequest(String country, String collectionId) {
-    String url = buildCollectionApiUrl(country) + "?q=id==%22" + collectionId  + "%22";
+  private HttpGet fetchCollectionsRequest(String countryCode, String collectionId) {
+    String url = buildCollectionApiUrl(countryCode) + "?q=id==%22" + collectionId  + "%22";
 
     HttpGet request = new HttpGet(url);
     request.setHeader("x-molgenis-token", token);
@@ -266,8 +270,8 @@ public class DirectoryApi {
    * @param entities    the individual entities.
    * @return an outcome, either successful or an error
    */
-  public OperationOutcome updateEntitiesNew(String country, DirectoryCollectionPut directoryCollectionPut) {
-    HttpPut request = updateEntitiesRequestNew(country, directoryCollectionPut);
+  public OperationOutcome updateEntities(DirectoryCollectionPut directoryCollectionPut) {
+    HttpPut request = updateEntitiesRequest(directoryCollectionPut);
 
     try (CloseableHttpResponse response = httpClient.execute(request)) {
       if (response.getStatusLine().getStatusCode() < 300) {
@@ -280,8 +284,8 @@ public class DirectoryApi {
     }
   }
 
-  private HttpPut updateEntitiesRequestNew(String country, DirectoryCollectionPut directoryCollectionPut) {
-    HttpPut request = new HttpPut(buildCollectionApiUrl(country));
+  private HttpPut updateEntitiesRequest(DirectoryCollectionPut directoryCollectionPut) {
+    HttpPut request = new HttpPut(buildCollectionApiUrl(directoryCollectionPut.getCountryCode()));
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     request.setHeader("Content-type", "application/json");
@@ -289,11 +293,7 @@ public class DirectoryApi {
     return request;
   }
 
-  private String buildCollectionApiUrl(String country) {
-    return (constructCollectionApiUrl(Util.deriveCountryCodeFromCountry(country)));
-  }
-
-  private String constructCollectionApiUrl(String countryCode) {
+  private String buildCollectionApiUrl(String countryCode) {
     String countryCodeInsert = "";
     if (countryCode != null && !countryCode.isEmpty())
       countryCodeInsert = countryCode + "_";
@@ -318,10 +318,6 @@ public class DirectoryApi {
     String payload = EntityUtils.toString(response.getEntity(), UTF_8);
     return gson.fromJson(payload, new TypeToken<ItemsDto<IdDto>>() {
     }.getType());
-  }
-
-  private String urlPrefix(String countryCode) {
-    return baseUrl + "/api/v2/eu_bbmri_eric_" + countryCode;
   }
 
   static class LoginCredentials {

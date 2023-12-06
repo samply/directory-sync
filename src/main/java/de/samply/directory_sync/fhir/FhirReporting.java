@@ -189,21 +189,8 @@ public class FhirReporting {
         });
   }
 
-  public Either<OperationOutcome, Map<String, Integer>> fetchSpecimenCountsByCollection(String defaultCollectionId) {
-    Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollection = fhirApi.fetchSpecimensByCollection(defaultCollectionId);
-    if (specimensByCollection.isRight()) {
-      Map<String, List<Specimen>> lettuce = specimensByCollection.get();
-      Map<String, Integer> specimenCountsByCollection = Maps.transformValues(lettuce, list -> list.size());
-      return Either.right(specimenCountsByCollection);
-    } else {
-      OperationOutcome outcome = new OperationOutcome();
-      outcome.addIssue().setSeverity(ERROR).setDiagnostics("Problem finding specimens");
-      return Either.left(outcome);
-    }
-  }
-
-  public Either<OperationOutcome, List<FhirCollection>> fetchFhirCollections(String defaultCollectionId) {
-    Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollectionOutcome = fhirApi.fetchSpecimensByCollection(defaultCollectionId);
+  public Either<OperationOutcome, List<FhirCollection>> fetchFhirCollections(BbmriEricId defaultBbmriEricCollectionId) {
+    Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollectionOutcome = fhirApi.fetchSpecimensByCollection(defaultBbmriEricCollectionId);
     
     if (specimensByCollectionOutcome.isRight()) {
         Map<String,FhirCollection> entities = new HashMap<String,FhirCollection>();

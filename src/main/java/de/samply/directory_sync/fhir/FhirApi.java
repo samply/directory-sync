@@ -256,7 +256,7 @@ public class FhirApi {
    * @return an Either object containing either a map of collection id to list of specimens, or an OperationOutcome object in case of an error
    * @throws Exception if the FHIR server request fails or the response is invalid
    */
-  Either<OperationOutcome, Map<String,List<Specimen>>> fetchSpecimensByCollection(String defaultCollectionId) {
+  Either<OperationOutcome, Map<String,List<Specimen>>> fetchSpecimensByCollection(BbmriEricId defaultBbmriEricCollectionId) {
     try {
       Bundle response = (Bundle) fhirClient.search().forResource(Specimen.class).execute();
 
@@ -264,7 +264,7 @@ public class FhirApi {
               .map(e -> (Specimen) e.getResource())
               .collect(Collectors.groupingBy(s -> extractCollectionIdFromSpecimen(s)));
 
-      defaultCollectionId = determineDefaultCollectionId(defaultCollectionId, specimensByCollection);
+      defaultBbmriEricCollectionId = determineDefaultCollectionId(defaultBbmriEricCollectionId, specimensByCollection);
 
       // Remove specimens without a collection from specimensByCollection, but keep
       // the relevant specimen list, just in case we have a valid default ID to
@@ -273,8 +273,8 @@ public class FhirApi {
 
       // Replace the DEFAULT_COLLECTION_ID key in specimensByCollection by a sensible collection ID,
       // assuming, of course, that there were any specemins caregorized by DEFAULT_COLLECTION_ID.
-      if (defaultCollection != null && defaultCollection.size() != 0 && defaultCollectionId != null) {
-        specimensByCollection.put(defaultCollectionId, defaultCollection);
+      if (defaultCollection != null && defaultCollection.size() != 0 && defaultBbmriEricCollectionId != null) {
+        specimensByCollection.put(defaultBbmriEricCollectionId.toString(), defaultCollection);
       }
 
       return Either.right(specimensByCollection);
@@ -341,28 +341,28 @@ public class FhirApi {
      * If no default collection id is provided, tries to find one from the available collections.
      * If no valid collection id can be found, returns null.
      *
-     * @param defaultCollectionId the default collection id supplied by the site
+     * @param defaultBbmriEricCollectionId the default collection id supplied by the site
      * @param specimensByCollection a map of collection id to list of specimens
      * @return the default collection id, or null if none is found
      */
-  private String determineDefaultCollectionId(String defaultCollectionId, Map<String,List<Specimen>> specimensByCollection) {
+  private BbmriEricId determineDefaultCollectionId(BbmriEricId defaultBbmriEricCollectionId, Map<String,List<Specimen>> specimensByCollection) {
     // If no default collection ID has been provided by the site, see if we can find a plausible value.
     // If there are no specimens with a collection ID, but there is a single collection,
     // then we can reasonably assume that the collection can be used as a default.
-    if ((defaultCollectionId == null || defaultCollectionId.isEmpty()) && specimensByCollection.size() == 1 && specimensByCollection.containsKey(DEFAULT_COLLECTION_ID)) {
+    if (defaultBbmriEricCollectionId == null && specimensByCollection.size() == 1 && specimensByCollection.containsKey(DEFAULT_COLLECTION_ID)) {
       Either<OperationOutcome, List<Organization>> collectionsOutcome = listAllCollections();
       if (collectionsOutcome.isRight()) {
         List<Organization> collections = collectionsOutcome.get();
-        if (collections.size() == 1)
-          defaultCollectionId = extractValidDirectoryIdentifierFromCollection(collections.get(0));
+        if (collections.size() == 1) {
+          String defaultCollectionId = extractValidDirectoryIdentifierFromCollection(collections.get(0));
+          defaultBbmriEricCollectionId = BbmriEricId
+          .valueOf(defaultCollectionId)
+          .orElse(null);
+        }
       }
     }
 
-    // Check that the collection name is a valid Directory ID.
-    if (!isValidDirectoryCollectionIdentifier(defaultCollectionId))
-      defaultCollectionId = null;
-
-    return defaultCollectionId;
+    return defaultBbmriEricCollectionId;
   }
 
   /**

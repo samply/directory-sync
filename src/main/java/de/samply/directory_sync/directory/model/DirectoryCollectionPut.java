@@ -8,6 +8,18 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * This is a data transfer object that maps onto the JSON needed for a PUT request
+ * to the Directory API when you want to update one or more collections.
+ * 
+ * It simply extends a Map and adds a single key, "entities". This contains a list
+ * of collections. Each collection is also a Map, with keys corresponding to the
+ * various attributes needed when updating, such as collection name or ID.
+ * 
+ * The setter methods allow you to set attributes in collections identified by
+ * collection ID. If you use an ID that is not yet known, a new collection with this
+ * ID will first be created.
+ */
 public class DirectoryCollectionPut extends HashMap {
   private static final Logger logger = LoggerFactory.getLogger(DirectoryCollectionPut.class);
 
@@ -93,8 +105,35 @@ public class DirectoryCollectionPut extends HashMap {
             .collect(Collectors.toList());
     }
 
-    public ArrayList<Entity> getEntities() {
-        return (ArrayList<Entity>) get("entities");
+    /**
+     * Gets the country code for the collections, e.g. "DE".
+     * 
+     * Assumes that all collections will have the same code and simply returns
+     * the code of the first collection.
+     * 
+     * If there are no collections, returns null.
+     * 
+     * May throw a null pointer exception.
+     * 
+     * @return Country code
+     */
+    public String getCountryCode() {
+        List<Entity> entities = getEntities();
+        if (entities == null || entities.size() == 0)
+            return null;
+        Entity entity = entities.get(0);
+        String countryCode = entity.getCountry();
+        if (countryCode == null || countryCode.isEmpty())
+            countryCode = BbmriEricId
+                .valueOf(entity.getId())
+                .orElse(null)
+                .getCountryCode();
+
+        return countryCode;
+    }
+
+    private List<Entity> getEntities() {
+        return (List<Entity>) get("entities");
     }
 
     private Entity getEntity(String id) {
@@ -132,6 +171,10 @@ public class DirectoryCollectionPut extends HashMap {
                 return;
 
                 put("country", country);
+        }
+
+        public String getCountry() {
+            return (String) get("country");
         }
 
         public void setName(String name) {

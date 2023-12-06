@@ -34,7 +34,7 @@ public class FhirCollectionToDirectoryCollectionPutConverter {
       convertAgeHigh(directoryCollectionPut, fhirCollection);
       convertMaterials(directoryCollectionPut, fhirCollection);
       convertStorageTemperatures(directoryCollectionPut, fhirCollection);
-      convertDiagnosisAvailable(directoryCollectionPut, fhirCollection);
+      convertDiagnosisAvailableEmpty(directoryCollectionPut, fhirCollection);
     } catch(Exception e) {
         logger.error("Problem converting FHIR attributes to Directory attributes. " + Util.traceFromException(e));
         return null;
@@ -135,34 +135,34 @@ public class FhirCollectionToDirectoryCollectionPutConverter {
     directoryCollectionPut.setStorageTemperatures(id, directoryStorageTemperatures);
   }
 
-  public static void convertDiagnosisAvailable(DirectoryCollectionPut directoryCollectionPut, FhirCollection fhirCollection) {
-       String id = fhirCollection.getId();
-    //   List<String> diagnoses = fhirCollection.getDiagnosisAvailable();
-
-    // if (diagnoses == null)
-    //     diagnoses = new ArrayList<String>();
-
-    // List<String> miriamDiagnoses = diagnoses.stream()
-    //         .map(icd -> {
-    //             if (icd.startsWith("urn:miriam:icd:")) { return icd; }
-    //             else if (icd.length() == 3 || icd.length() == 5) {  // E.g. C75 or E23.1
-    //                 return "urn:miriam:icd:" + icd;
-    //             } else {
-    //                 logger.warn("Entities.setDiagnosisAvailable: invalid diagnosis code " + icd); return null;
-    //             } })
-    //         .filter(icd -> icd != null)
-    //         .distinct()  // Remove duplicate diagnoses
-    //         .collect(Collectors.toList());
-    //
-    // directoryCollectionPut.setDiagnosisAvailable(id, miriamDiagnoses);
-
-
-
-
+  public static void convertDiagnosisAvailableEmpty(DirectoryCollectionPut directoryCollectionPut, FhirCollection fhirCollection) {
+    String id = fhirCollection.getId();
     // The Directory is very picky about which ICD10 codes it will accept, and some
     // of the codes that are in our test data are not known to the Directory and
     // give rise to errors, which lead to the entire PUT to the Directory being
     // rejected. So, for the time being, I am turning off the diagnosis conversion.
     directoryCollectionPut.setDiagnosisAvailable(id, new ArrayList<String>());
+  }
+
+  public static void convertDiagnosisAvailable(DirectoryCollectionPut directoryCollectionPut, FhirCollection fhirCollection) {
+    String id = fhirCollection.getId();
+    List<String> diagnoses = fhirCollection.getDiagnosisAvailable();
+
+    if (diagnoses == null)
+        diagnoses = new ArrayList<String>();
+
+    List<String> miriamDiagnoses = diagnoses.stream()
+            .map(icd -> {
+                if (icd.startsWith("urn:miriam:icd:")) { return icd; }
+                else if (icd.length() == 3 || icd.length() == 5) {  // E.g. C75 or E23.1
+                    return "urn:miriam:icd:" + icd;
+                } else {
+                    logger.warn("Entities.setDiagnosisAvailable: invalid diagnosis code " + icd); return null;
+                } })
+            .filter(icd -> icd != null)
+            .distinct()  // Remove duplicate diagnoses
+            .collect(Collectors.toList());
+    
+    directoryCollectionPut.setDiagnosisAvailable(id, miriamDiagnoses);
   }
 }

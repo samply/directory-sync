@@ -54,12 +54,12 @@ public class DirectoryService {
     return api.updateCollectionSizes(countryCode, collectionSizeDtos);
   }
 
-  public List<OperationOutcome> updateEntities(String country, DirectoryCollectionPut directoryCollectionPut) {
-    OperationOutcome operationOutcome = api.updateEntitiesNew(country, directoryCollectionPut);
+  public List<OperationOutcome> updateEntities(DirectoryCollectionPut directoryCollectionPut) {
+    OperationOutcome operationOutcome = api.updateEntities(directoryCollectionPut);
     return Collections.singletonList(operationOutcome);
   }
   
-  public Either<OperationOutcome, DirectoryCollectionGet> fetchDirectoryCollectionGetOutcomes(String country, List<String> collectionIds) {
-    return(api.fetchCollectionGetOutcomes(country, collectionIds));
+  public Either<OperationOutcome, DirectoryCollectionGet> fetchDirectoryCollectionGetOutcomes(String countryCode, List<String> collectionIds) {
+    return(api.fetchCollectionGetOutcomes(countryCode, collectionIds));
   }
 }
