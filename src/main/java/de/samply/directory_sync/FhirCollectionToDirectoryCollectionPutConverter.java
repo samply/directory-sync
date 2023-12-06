@@ -10,6 +10,13 @@ import org.slf4j.LoggerFactory;
 import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
 import de.samply.directory_sync.fhir.model.FhirCollection;
 
+/**
+ * Takes a list of FhirCollection objects and converts them into a
+ * DirectoryCollectionPut object.
+ * 
+ * This is a kind of FHIR to Directory conversion, so there are differences
+ * in vocabularies, and it is the job of this converter to impedence match them.
+ */
 public class FhirCollectionToDirectoryCollectionPutConverter {
   private static final Logger logger = LoggerFactory.getLogger(FhirCollectionToDirectoryCollectionPutConverter.class);
 
