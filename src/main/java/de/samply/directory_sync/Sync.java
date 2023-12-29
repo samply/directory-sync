@@ -3,6 +3,7 @@ package de.samply.directory_sync;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
+import de.samply.directory_sync.directory.CreateFactTablesFromStarModelInputData;
 import de.samply.directory_sync.directory.DirectoryApi;
 import de.samply.directory_sync.directory.DirectoryService;
 import de.samply.directory_sync.directory.MergeDirectoryCollectionGetToDirectoryCollectionPut;
@@ -173,7 +174,32 @@ public class Sync {
 
             return directoryService.updateEntities(directoryCollectionPut);
         } catch (Exception e) {
-            return createErrorOutcome("Unexpected error: " + Util.traceFromException(e));
+            return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
+        }
+    }
+
+    public List<OperationOutcome> sendStarModelUpdatesToDirectory(String defaultCollectionId, int minDonors) {
+        try {
+            BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
+                .valueOf(defaultCollectionId)
+                .orElse(null);
+
+            Either<OperationOutcome, StarModelData> starModelInputDataOutcome = fhirReporting.fetchStarModelInputData(defaultBbmriEricCollectionId);
+            if (starModelInputDataOutcome.isLeft())
+                return createErrorOutcome("Problem getting star model information from FHIR store, " + errorMessageFromOperationOutcome(starModelInputDataOutcome.getLeft()));
+
+            StarModelData starModelInputData = starModelInputDataOutcome.get();
+
+            starModelInputData.setMinDonors(minDonors);
+
+            // Take the patient list and the specimen list from starModelInputData and
+            // use them to generate the star model fact tables.
+            CreateFactTablesFromStarModelInputData.createFactTables(starModelInputData);
+
+            // Send fact tables to Direcory. Return some kind of results count or whatever
+            return directoryService.updateStarModel(starModelInputData);
+        } catch (Exception e) {
+            return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
         }
     }
     

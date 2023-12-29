@@ -11,23 +11,30 @@ import ca.uhn.fhir.rest.gclient.ICreateTyped;
 import ca.uhn.fhir.rest.gclient.IQuery;
 import ca.uhn.fhir.rest.gclient.IUpdateExecutable;
 import ca.uhn.fhir.rest.gclient.UriClientParam;
+import ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException;
+import de.samply.directory_sync.Util;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import io.vavr.control.Either;
 
 import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.function.Predicate;
 import java.util.function.Function;
 import java.util.HashSet;
 
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.Bundle.BundleEntryComponent;
+import org.hl7.fhir.r4.model.CodeableConcept;
+import org.hl7.fhir.r4.model.Coding;
 import org.hl7.fhir.r4.model.DateType;
 import org.hl7.fhir.r4.model.Extension;
 import org.hl7.fhir.r4.model.Identifier;
@@ -41,6 +48,7 @@ import org.hl7.fhir.r4.model.ResourceType;
 import org.hl7.fhir.r4.model.Specimen;
 import org.hl7.fhir.r4.model.StringType;
 import org.hl7.fhir.r4.model.Reference;
+import org.hl7.fhir.r4.model.Condition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +59,7 @@ public class FhirApi {
 
   private static final String BIOBANK_PROFILE_URI = "https://fhir.bbmri.de/StructureDefinition/Biobank";
   private static final String COLLECTION_PROFILE_URI = "https://fhir.bbmri.de/StructureDefinition/Collection";
+  private static final String SAMPLE_DIAGNOSIS_URI = "https://fhir.bbmri.de/StructureDefinition/SampleDiagnosis";
   private static final String DEFAULT_COLLECTION_ID = "DEFAULT";
 
   private static final Logger logger = LoggerFactory.getLogger(FhirApi.class);
@@ -236,7 +245,7 @@ public class FhirApi {
    * @return an Either object containing either a map of collection id to list of specimens, or an OperationOutcome object in case of an error
    * @throws Exception if the FHIR server request fails or the response is invalid
    */
-  Either<OperationOutcome, Map<String,List<Specimen>>> fetchSpecimensByCollection(BbmriEricId defaultBbmriEricCollectionId) {
+  public Either<OperationOutcome, Map<String,List<Specimen>>> fetchSpecimensByCollection(BbmriEricId defaultBbmriEricCollectionId) {
     try {
       Bundle response = (Bundle) fhirClient.search().forResource(Specimen.class).execute();
 
@@ -267,6 +276,8 @@ public class FhirApi {
 
   /**
    * Fetches Patient resources from the FHIR server and groups them by their collection ID.
+   * Starts with the available specimens and uses Patient references to find the patients.
+   * Note that this approach means that Patients with no specimens will not be included.
    *
    * @param defaultCollectionId
    * @return
@@ -302,19 +313,83 @@ public class FhirApi {
    */
   private List<Patient> extractPatientListFromSpecimenList(List<Specimen> specimens) {
     List<Patient> patients = specimens.stream()
-            .filter(specimen -> specimen.hasSubject()) // filter out specimens without a patient reference
-            .map(specimen -> fhirClient // Find a Patient object corresponding to the specimen's subject
-                    .read()
-                    .resource(Patient.class)
-                    .withId(specimen.getSubject()
-                            .getReference()
-                            .replaceFirst("Patient/", ""))
-                    .execute())
-            .filter(distinctBy(Patient::getId)) // Avoid duplicating the same patient more than once
-            .collect(Collectors.toList()); // collect the patients into a new list
+            // filter out specimens without a patient reference
+            .filter(specimen -> specimen.hasSubject())
+            // Find a Patient object corresponding to the specimen's subject
+            .map(specimen -> extractPatientFromSpecimen(specimen))
+            // Avoid duplicating the same patient
+            .filter(distinctBy(Patient::getId))
+            // collect the patients into a new list
+            .collect(Collectors.toList());
 
     return patients;
   }
+
+  /**
+   * Extracts a Patient resource from a Specimen resource.
+   * 
+   * @param specimen a Specimen resource that contains a reference to a Patient resource
+   * @return a Patient resource that matches the reference in the Specimen resource, or null if not found
+   * @throws ca.uhn.fhir.rest.server.exceptions.ResourceNotFoundException if the FHIR server cannot find the Patient resource
+   */
+  public Patient extractPatientFromSpecimen(Specimen specimen) {
+    return fhirClient
+              .read()
+              .resource(Patient.class)
+              .withId(specimen.getSubject()
+                      .getReference()
+                      .replaceFirst("Patient/", ""))
+              .execute();
+  }
+
+  /**
+   * Extracts a list of condition codes from a Patient resource using a FHIR client.
+   * The condition codes are based on the system "http://hl7.org/fhir/sid/icd-10".
+   * @param patient a Patient resource that has an ID element
+   * @return a list of strings that represent the condition codes of the patient, or an empty list if none are found
+   */
+  public List<String> extractConditionCodesFromPatient(Patient patient) {
+    List<String> conditionCodes = new ArrayList<String>();
+    try {
+      // Search for Condition resources by patient ID
+      Bundle bundle = fhirClient
+        .search()
+        .forResource(Condition.class)
+        .where(Condition.SUBJECT.hasId(patient.getIdElement()))
+        .returnBundle(Bundle.class)
+        .execute();
+      if (!bundle.hasEntry())
+        return conditionCodes;
+
+      // Create a stream of Condition resources from the Bundle
+      Stream<Condition> conditionStream = bundle.getEntry().stream()
+        // Map the bundle entries to Condition resources
+        .map(entry -> (Condition) entry.getResource());
+
+      // Loop over the Condition resources
+      conditionStream.forEach(condition -> {
+        // Get the code element of the Condition resource
+        CodeableConcept code = condition.getCode();
+        // Get the list of coding elements from the code element
+        List<Coding> codings = code.getCoding();
+        // Loop over the coding elements
+        for (Coding coding : codings) {
+          // Check if the coding element has the system "http://hl7.org/fhir/sid/icd-10"
+          if (coding.getSystem().equals("http://hl7.org/fhir/sid/icd-10")) {
+            // Get the code value and the display value from the coding element
+            String codeValue = coding.getCode();
+            //String displayValue = coding.getDisplay();
+            conditionCodes.add(codeValue);
+          }
+        }
+      });
+    } catch (ResourceNotFoundException e) {
+      logger.error("extractConditionCodesFromPatient: could not find Condition, stack trace:\n" + Util.traceFromException(e));
+    }
+
+    return conditionCodes;
+  }
+
 
   /**
      * Determines a plausible collection id for specimens that do not have a collection id.
@@ -399,6 +474,52 @@ public class FhirApi {
     }
 
     return collectionId;
+  }
+
+  public List<String> extractDiagnosesFromSpecimen(Specimen specimen) {
+    return extractExtensionElementValuesFromSpecimen(specimen, SAMPLE_DIAGNOSIS_URI);
+  }
+
+  /**
+   * Extracts the code value of each extension element with a given URL from a Specimen resource.
+   * The extension element must have a value of type CodeableConcept.
+   * @param specimen a Specimen resource that may have extension elements
+   * @param url the URL of the extension element to extract
+   * @return a list of strings that contains the code value of each extension element with the given URL, or an empty list if none is found
+   * @see Extension[^2^][2]
+   * @see CodeableConcept[^3^][3]
+   */
+  public List<String> extractExtensionElementValuesFromSpecimen(Specimen specimen, String url) {
+    List<Extension> extensions = specimen.getExtensionsByUrl(url);
+    List<String> elementValues = new ArrayList<String>();
+
+    // Check if the list is not empty
+    for (Extension extension: extensions) {
+      // Get the value of the extension as a Quantity object
+      CodeableConcept codeableConcept = (CodeableConcept) extension.getValue();
+
+      elementValues.add(codeableConcept.getCoding().get(0).getCode());
+    }
+
+    return elementValues;
+  }
+
+  /**
+   * Extracts the code values of the extension elements with a given URL from a list of Specimen resources.
+   * The extension elements must have a value of type CodeableConcept.
+   * @param specimens a list of Specimen resources that may have extension elements
+   * @param url the URL of the extension elements to extract
+   * @return a list of strings that contains the distinct code values of the extension elements with the given URL, or an empty list if none are found
+   * @see Extension[^2^][2]
+   * @see CodeableConcept[^3^][3]
+   */
+  public List<String> extractExtensionElementValuesFromSpecimens(List<Specimen> specimens, String url) {
+    return specimens.stream()
+            // Flatten each specimen's extension elements into a single stream
+            .flatMap(s -> extractExtensionElementValuesFromSpecimen(s, url).stream())
+            // Collect the results into a non-duplicating list
+            .distinct()
+            .collect(Collectors.toList());
   }
 
   private boolean isValidDirectoryCollectionIdentifier(String collectionIdentifier) {

@@ -10,6 +10,7 @@ import ca.uhn.fhir.parser.IParser;
 import com.google.common.collect.Maps;
 import com.google.common.io.ByteStreams;
 
+import de.samply.directory_sync.StarModelData;
 import de.samply.directory_sync.Util;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
@@ -32,6 +33,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.checkerframework.checker.units.qual.g;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.r4.model.Coding;
 import org.hl7.fhir.r4.model.Library;
@@ -57,6 +59,8 @@ public class FhirReporting {
 
   private static final String LIBRARY_URI = "https://fhir.bbmri.de/Library/collection-size";
   private static final String MEASURE_URI = "https://fhir.bbmri.de/Measure/collection-size";
+  private static final String STORAGE_TEMPERATURE_URI = "https://fhir.bbmri.de/StructureDefinition/StorageTemperature";
+  private static final String SAMPLE_DIAGNOSIS_URI = "https://fhir.bbmri.de/StructureDefinition/SampleDiagnosis";
 
   private final FhirContext fhirContext;
   private final FhirApi fhirApi;
@@ -242,6 +246,13 @@ private void updateFhirCollectionsWithPatientData(Map<String,FhirCollection> ent
     }
 }
 
+public Either<OperationOutcome, StarModelData> fetchStarModelInputData(BbmriEricId defaultBbmriEricCollectionId) {
+    PopulateStarModelInputData populateStarModelInputData = new PopulateStarModelInputData(fhirApi);
+    StarModelData starModelInputData = populateStarModelInputData.populate(defaultBbmriEricCollectionId);
+
+    return Either.right(starModelInputData);
+}
+
 private OperationOutcome createOutcomeWithError(String message) {
     OperationOutcome outcome = new OperationOutcome();
     outcome.addIssue().setSeverity(ERROR).setDiagnostics(message);
@@ -259,47 +270,11 @@ private OperationOutcome createOutcomeWithError(String message) {
   }
 
   private List<String> extractStorageTemperaturesFromSpecimenList(List<Specimen> specimens) {
-    return specimens.stream()
-            .filter(s -> extractStorageTemperatureFromSpecimen(s) != null)
-            // Map each specimen to its temperature
-            .map(s -> extractStorageTemperatureFromSpecimen(s))
-            // Collect the results into a non-duplicating list
-            .collect(Collectors.toSet()).stream().collect(Collectors.toList());
+    return fhirApi.extractExtensionElementValuesFromSpecimens(specimens, STORAGE_TEMPERATURE_URI);
   }
 
   private List<String> extractDiagnosesFromSpecimenList(List<Specimen> specimens) {
-    return specimens.stream()
-            .filter(s -> extractDiagnosesFromSpecimen(s) != null)
-            // Map each specimen to its temperature
-            .map(s -> extractDiagnosesFromSpecimen(s))
-            // Collect the results into a non-duplicating list
-            .collect(Collectors.toSet()).stream().collect(Collectors.toList());
-  }
-
-  private String extractStorageTemperatureFromSpecimen(Specimen specimen) {
-    return extractExtensionElementValueFromSpecimen( specimen, "https://fhir.bbmri.de/StructureDefinition/StorageTemperature");
-  }
-
-  private String extractDiagnosesFromSpecimen(Specimen specimen) {
-    return extractExtensionElementValueFromSpecimen( specimen, "https://fhir.bbmri.de/StructureDefinition/SampleDiagnosis");
-  }
-
-  private String extractExtensionElementValueFromSpecimen(Specimen specimen, String url) {
-    List<Extension> extensions = specimen.getExtensionsByUrl(url);
-    String elementValue = null;
-
-    // Check if the list is not empty
-    if (!extensions.isEmpty()) {
-      // Get the first extension
-      Extension extension = extensions.get(0);
-
-      // Get the value of the extension as a Quantity object
-      CodeableConcept codeableConcept = (CodeableConcept) extension.getValue();
-
-      elementValue = codeableConcept.getCoding().get(0).getCode();
-    }
-
-    return elementValue;
+    return fhirApi.extractExtensionElementValuesFromSpecimens(specimens, SAMPLE_DIAGNOSIS_URI);
   }
 
   private List<String> extractSexFromPatientList(List<Patient> patients) {

@@ -3,6 +3,7 @@ package de.samply.directory_sync;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,10 +71,10 @@ public class FhirCollectionToDirectoryCollectionPutConverter {
       String id = fhirCollection.getId();
       List<String> sex = fhirCollection.getSex();
 
-      // Signifiers for sex largely overlap between FHIR and Directory, but Directory likes
-      // upper case
       List<String> ucSex = sex.stream()
-              .map(s -> s.toUpperCase())
+              .map(s -> FhirToDirectoryAttributeConverter.convertSex(s))
+              .filter(Objects::nonNull) // Use a method reference to check for non-null values
+              .distinct()  // Remove duplicate elements
               .collect(Collectors.toList());
 
       directoryCollectionPut.setSex(id, ucSex);
@@ -101,24 +102,8 @@ public class FhirCollectionToDirectoryCollectionPutConverter {
           materials = new ArrayList<String>();
 
       List<String> directoryMaterials = materials.stream()
-              // Basic conversion: make everything upper case, replace - with _
-              .map(s -> s.toUpperCase())
-              .map(s -> s.replaceAll("-", "_"))
-              // Some names are different between FHIR and Directory, so convert those.
-              .map(s -> s.replaceAll("_VITAL", ""))
-              .map(s -> s.replaceAll("^TISSUE_FORMALIN$", "TISSUE_PARAFFIN_EMBEDDED"))
-              .map(s -> s.replaceAll("^TISSUE$", "TISSUE_FROZEN"))
-              .map(s -> s.replaceAll("^CF_DNA$", "CDNA"))
-              .map(s -> s.replaceAll("^BLOOD_SERUM$", "SERUM"))
-              .map(s -> s.replaceAll("^STOOL_FAECES$", "FECES"))
-              .map(s -> s.replaceAll("^BLOOD_PLASMA$", "SERUM"))
-              // Some names are present in FHIR but not in Directory. Use "OTHER" as a placeholder.
-              .map(s -> s.replaceAll("^.*_OTHER$", "OTHER"))
-              .map(s -> s.replaceAll("^DERIVATIVE$", "OTHER"))
-              .map(s -> s.replaceAll("^CSF_LIQUOR$", "OTHER"))
-              .map(s -> s.replaceAll("^LIQUID$", "OTHER"))
-              .map(s -> s.replaceAll("^ASCITES$", "OTHER"))
-              .map(s -> s.replaceAll("^TISSUE_PAXGENE_OR_ELSE$", "OTHER"))
+              .map(s -> FhirToDirectoryAttributeConverter.convertMaterial(s))
+              .filter(Objects::nonNull) // Use a method reference to check for non-null values
               .distinct()  // Remove duplicate elements
               .collect(Collectors.toList());
  
@@ -132,10 +117,9 @@ public class FhirCollectionToDirectoryCollectionPutConverter {
     if (storageTemperatures == null)
         storageTemperatures = new ArrayList<String>();
 
-    // The Directory understands most of the FHIR temperature codes, but it doesn't
-    // know about gaseous nitrogen.
     List<String> directoryStorageTemperatures = storageTemperatures.stream()
-        .map(s -> s.replaceAll("temperatureGN", "temperatureOther"))
+        .map(s -> FhirToDirectoryAttributeConverter.convertStorageTemperature(s))
+        .filter(Objects::nonNull) // Use a method reference to check for non-null values
         .distinct()  // Remove duplicate elements
         .collect(Collectors.toList());
 
@@ -159,14 +143,8 @@ public class FhirCollectionToDirectoryCollectionPutConverter {
         diagnoses = new ArrayList<String>();
 
     List<String> miriamDiagnoses = diagnoses.stream()
-            .map(icd -> {
-                if (icd.startsWith("urn:miriam:icd:")) { return icd; }
-                else if (icd.length() == 3 || icd.length() == 5) {  // E.g. C75 or E23.1
-                    return "urn:miriam:icd:" + icd;
-                } else {
-                    logger.warn("Entities.setDiagnosisAvailable: invalid diagnosis code " + icd); return null;
-                } })
-            .filter(icd -> icd != null)
+            .map(icd -> FhirToDirectoryAttributeConverter.convertDiagnosis(icd))
+            .filter(Objects::nonNull) // Use a method reference to check for non-null values
             .distinct()  // Remove duplicate diagnoses
             .collect(Collectors.toList());
     

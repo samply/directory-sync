@@ -1,5 +1,6 @@
 package de.samply.directory_sync.directory;
 
+import de.samply.directory_sync.StarModelData;
 import de.samply.directory_sync.Util;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -18,7 +19,11 @@ import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
 import de.samply.directory_sync.fhir.FhirReporting;
 import io.vavr.control.Either;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -302,11 +307,49 @@ public class DirectoryApi {
     return request;
   }
 
+  public OperationOutcome updateStarModel(StarModelData starModelInputData) {
+    HttpPut request = updateStarModelRequest(starModelInputData);
+
+    try (CloseableHttpResponse response = httpClient.execute(request)) {
+      if (response.getStatusLine().getStatusCode() < 300) {
+        return updateSuccessful(starModelInputData.getFactCount());
+      } else {
+        return error("entity update status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
+      }
+    } catch (IOException e) {
+      return error("entity update exception", e.getMessage());
+    }
+  }
+
+  private HttpPut updateStarModelRequest(StarModelData starModelInputData) {
+    HttpPut request = new HttpPut(buildApiUrl(starModelInputData.getCountryCode(), "facts"));
+    // Directory likes to have its data wrapped in a map with key "entities".
+    Map<String,Object> body = new HashMap<String,Object>();
+    body.put("entities", starModelInputData.getFactTables());
+    String jsonBody = gson.toJson(body);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    request.setEntity(new StringEntity(jsonBody, UTF_8));
+    return request;
+  }
+
   private String buildCollectionApiUrl(String countryCode) {
+    return buildApiUrl(countryCode, "collections");
+  }
+
+  /**
+   * Create a URL for a specific Directory API endpoint.
+   * 
+   * @param countryCode a code such as "DE" specifying the country the URL should address. May be null.
+   * @param function specifies the type of the endpoint, e.g. "collections".
+   * @return
+   */
+  private String buildApiUrl(String countryCode, String function) {
     String countryCodeInsert = "";
     if (countryCode != null && !countryCode.isEmpty())
       countryCodeInsert = countryCode + "_";
-    String collectionApiUrl = baseUrl + "/api/v2/eu_bbmri_eric_" + countryCodeInsert + "collections";
+    String collectionApiUrl = baseUrl + "/api/v2/eu_bbmri_eric_" + countryCodeInsert + function;
 
     return collectionApiUrl;
   }
