@@ -196,8 +196,14 @@ public class Sync {
             // use them to generate the star model fact tables.
             CreateFactTablesFromStarModelInputData.createFactTables(starModelInputData);
 
+            // Check all of the ICD 10 values to see if they are known to the Directory
+            // and deal with them appropriately if not.
+            directoryService.collectStarModelDiagnosisCorrections(starModelInputData);
+            starModelInputData.implementDiagnosisCorrections();
+
             // Send fact tables to Direcory. Return some kind of results count or whatever
-            return directoryService.updateStarModel(starModelInputData);
+            List<OperationOutcome> starModelUpdateOutcome = directoryService.updateStarModel(starModelInputData);
+            return starModelUpdateOutcome;
         } catch (Exception e) {
             return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
         }

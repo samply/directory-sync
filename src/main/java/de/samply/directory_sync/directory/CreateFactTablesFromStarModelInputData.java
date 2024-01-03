@@ -1,17 +1,14 @@
 package de.samply.directory_sync.directory;
 
 import de.samply.directory_sync.StarModelData;
-import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.INFORMATION;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.hl7.fhir.r4.model.OperationOutcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

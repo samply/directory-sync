@@ -11,6 +11,9 @@ import static org.hl7.fhir.r4.model.OperationOutcome.IssueType.NOTFOUND;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import de.samply.directory_sync.directory.DirectoryApi.CollectionSizeDto;
+import de.samply.directory_sync.directory.DirectoryApi.LoginCredentials;
+import de.samply.directory_sync.directory.DirectoryApi.LoginResponse;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
@@ -33,6 +36,7 @@ import java.util.stream.Collectors;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
@@ -42,6 +46,8 @@ import org.apache.http.util.EntityUtils;
 import org.hl7.fhir.r4.model.OperationOutcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
+import java.net.URI;
 
 public class DirectoryApi {
   private static final Logger logger = LoggerFactory.getLogger(DirectoryApi.class);
@@ -308,7 +314,17 @@ public class DirectoryApi {
   }
 
   public OperationOutcome updateStarModel(StarModelData starModelInputData) {
-    HttpPut request = updateStarModelRequest(starModelInputData);
+    // Get rid of previous star models first. This is necessary, because:
+    // 1. A new star model may be decomposed into different hypercubes.
+    // 2. The new fact IDs may be different from the old ones.
+    OperationOutcome deleteOutcome = deleteStarModel(starModelInputData);
+    if (deleteOutcome.getIssue().size() > 0) {
+      logger.warn("Problem deleting star models");
+      return deleteOutcome;
+    }
+
+    // Now push the new data
+    HttpPost request = updateStarModelRequest(starModelInputData);
 
     try (CloseableHttpResponse response = httpClient.execute(request)) {
       if (response.getStatusLine().getStatusCode() < 300) {
@@ -321,8 +337,8 @@ public class DirectoryApi {
     }
   }
 
-  private HttpPut updateStarModelRequest(StarModelData starModelInputData) {
-    HttpPut request = new HttpPut(buildApiUrl(starModelInputData.getCountryCode(), "facts"));
+  private HttpPost updateStarModelRequest(StarModelData starModelInputData) {
+    HttpPost request = new HttpPost(buildApiUrl(starModelInputData.getCountryCode(), "facts"));
     // Directory likes to have its data wrapped in a map with key "entities".
     Map<String,Object> body = new HashMap<String,Object>();
     body.put("entities", starModelInputData.getFactTables());
@@ -331,6 +347,167 @@ public class DirectoryApi {
     request.setHeader("Accept", "application/json");
     request.setHeader("Content-type", "application/json");
     request.setEntity(new StringEntity(jsonBody, UTF_8));
+    return request;
+  }
+
+  private OperationOutcome deleteStarModel(StarModelData starModelInputData) {
+    String apiUrl = buildApiUrl(starModelInputData.getCountryCode(), "facts");
+
+    try {
+      for (String collectionId: starModelInputData.getInputCollectionIds()) {
+        // First get a list of fact IDs for this collection
+        Map factWrapper = fetchFactWrapperByCollection(apiUrl, collectionId);
+        if (!factWrapper.containsKey("items"))
+          return error("No facts for collection", collectionId);
+        List<Map<String, String>> facts = (List<Map<String, String>>) factWrapper.get("items");
+        List<String> factIds = facts.stream()
+                            .map(map -> map.get("id"))
+                            .collect(Collectors.toList());
+
+        // Take the list of fact IDs and delete all of the corresponding facts
+        // at the Directory.
+        OperationOutcome deleteOutcome = deleteFactsByIds(apiUrl, factIds);
+        if (deleteOutcome.getIssue().size() > 0)
+          return deleteOutcome;
+      }
+    } catch(Exception e) {
+      return error("Exception during delete", Util.traceFromException(e));
+    }
+
+    return new OperationOutcome();
+  }
+
+  public Map fetchFactWrapperByCollection(String apiUrl, String collectionId) {
+    Map body = null;
+    try {
+      HttpGet request = fetchFactWrapperByCollectionRequest(apiUrl, collectionId);
+
+      CloseableHttpResponse response = httpClient.execute(request);
+      if (response.getStatusLine().getStatusCode() < 300) {
+        HttpEntity httpEntity = response.getEntity();
+        String json = EntityUtils.toString(httpEntity);
+        body = gson.fromJson(json, Map.class);
+      } else
+        logger.warn("entity get HTTP error; " + Integer.toString(response.getStatusLine().getStatusCode()));
+    } catch (IOException e) {
+        logger.warn("entity get exception: " + Util.traceFromException(e));
+    } catch (Exception e) {
+        logger.warn("unknown exception: " + Util.traceFromException(e));
+    }
+
+    return body;
+  }
+
+  private HttpGet fetchFactWrapperByCollectionRequest(String apiUrl, String collectionId) {
+    String url = apiUrl + "?q=collection=='" + collectionId + "'";
+    HttpGet request = new HttpGet(url);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    return request;
+  }
+
+  public OperationOutcome deleteFactsByIds(String apiUrl, List<String> factIds) {
+    if (factIds.size() == 0)
+      // Nothing to delete
+      return new OperationOutcome();
+
+    HttpDeleteWithBody request = deleteFactsByIdsRequest(apiUrl, factIds);
+
+    try (CloseableHttpResponse response = httpClient.execute(request)) {
+      if (response.getStatusLine().getStatusCode() < 300) {
+        return new OperationOutcome();
+      } else {
+        return error("entity delete status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
+      }
+    } catch (IOException e) {
+      return error("entity delete exception", e.getMessage());
+    }
+  }
+
+  private HttpDeleteWithBody deleteFactsByIdsRequest(String apiUrl, List<String> factIds) {
+    HttpDeleteWithBody request = new HttpDeleteWithBody(apiUrl);
+    // Directory likes to have its delete data wrapped in a map with key "entityIds".
+    Map<String,Object> body = new HashMap<String,Object>();
+    body.put("entityIds", factIds);
+    String jsonBody = gson.toJson(body);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    request.setEntity(new StringEntity(jsonBody, UTF_8));
+    return request;
+  }
+
+  class HttpDeleteWithBody extends HttpEntityEnclosingRequestBase {
+    public static final String METHOD_NAME = "DELETE";
+
+    public HttpDeleteWithBody() {
+        super();
+    }
+
+    public HttpDeleteWithBody(final URI uri) {
+        super();
+        setURI(uri);
+    }
+
+    public HttpDeleteWithBody(final String uri) {
+        super();
+        setURI(URI.create(uri));
+    }
+
+    @Override
+    public String getMethod() {
+        return METHOD_NAME;
+    }
+  }
+
+  public OperationOutcome collectStarModelDiagnosisCorrections(StarModelData starModelInputData) {
+    Map<String, String> diagnoses = starModelInputData.getDiagnoses();
+    for (String diagnosis: diagnoses.keySet())
+      if (!isValidIcdValue(diagnosis)) {
+        String diagnosisCategory = diagnosis.split("\\.")[0];
+        if (isValidIcdValue(diagnosisCategory))
+          diagnoses.put(diagnosis, diagnosisCategory);
+        else
+          diagnoses.put(diagnosis, null);
+      }
+      
+    return null;
+  }
+
+  private boolean isValidIcdValue(String diagnosis) {
+    String url = baseUrl + "/api/v2/eu_bbmri_eric_disease_types?q=id=='" + diagnosis + "'";
+    try {
+      HttpGet request = isValidIcdValueRequest(url);
+      CloseableHttpResponse response = httpClient.execute(request);
+      if (response.getStatusLine().getStatusCode() < 300) {
+        HttpEntity httpEntity = response.getEntity();
+        String json = EntityUtils.toString(httpEntity);
+        Map body = gson.fromJson(json, Map.class);
+        if (body.containsKey("total")) {
+          Object total = body.get("total");
+          if (total instanceof Double) {
+            Integer intTotal = ((Double) total).intValue();
+            if (intTotal > 0)
+              return true;
+          }
+        }
+      } else
+        logger.warn("ICD validation get HTTP error; " + Integer.toString(response.getStatusLine().getStatusCode()));
+    } catch (IOException e) {
+        logger.warn("ICD validation get exception: " + Util.traceFromException(e));
+    } catch (Exception e) {
+        logger.warn("ICD validation, unknown exception: " + Util.traceFromException(e));
+    }
+
+    return false;
+  }
+
+  private HttpGet isValidIcdValueRequest(String url) {
+    HttpGet request = new HttpGet(url);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
     return request;
   }
 

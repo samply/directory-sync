@@ -79,6 +79,7 @@ public class StarModelData {
     }
 
     private Map<String,List<InputRow>> inputData = new HashMap<String,List<InputRow>>();
+    private Map<String,String> diagnoses = new HashMap<String,String>();
 
     public void addInputRow(String collectionId, InputRow row) {
         if (!inputData.containsKey(collectionId))
@@ -92,7 +93,20 @@ public class StarModelData {
     }
 
     public InputRow newInputRow(InputRow row, String histLoc) {
+        noteDiagnosis(FhirToDirectoryAttributeConverter.convertDiagnosis(histLoc));
         return new InputRow(row, histLoc);
+    }
+
+    private void noteDiagnosis(String diagnosis) {
+        diagnoses.put(diagnosis, diagnosis);
+    }
+
+    public void noteDiagnosis(String diagnosis, String newDiagnosis) {
+        diagnoses.put(diagnosis, newDiagnosis);
+    }
+
+    public Map<String, String> getDiagnoses() {
+        return diagnoses;
     }
 
     public List<Map<String, String>> getInputRowsAsStringMaps(String collectionId) {
@@ -131,6 +145,18 @@ public class StarModelData {
 
     public int getFactCount() {
         return factTables.size();
+    }
+
+    public void implementDiagnosisCorrections() {
+         for (Map<String, String> fact: factTables) {
+            if (!fact.containsKey("disease"))
+                continue;
+            String disease = fact.get("disease");
+            if (disease != null && diagnoses.containsKey(disease))
+                fact.put("disease", diagnoses.get(disease));
+            if (fact.get("disease") == null)
+                fact.remove("disease");
+        }
     }
 
     /**
