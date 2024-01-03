@@ -39,6 +39,8 @@ public class BbmriEricId {
    * a valid BBMRI-ERIC identifier
    */
   public static Optional<BbmriEricId> valueOf(String s) {
+    if (s == null)
+      return Optional.empty();
     Matcher matcher = PATTERN.matcher(s);
     if (!matcher.matches()) {
       return Optional.empty();
