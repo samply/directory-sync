@@ -3,25 +3,21 @@ package de.samply.directory_sync.fhir;
 import java.time.LocalDate;
 import java.time.Period;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.hl7.fhir.instance.model.api.IPrimitiveType;
 import org.hl7.fhir.r4.model.CodeableConcept;
 import org.hl7.fhir.r4.model.Coding;
 import org.hl7.fhir.r4.model.DateTimeType;
 import org.hl7.fhir.r4.model.OperationOutcome;
 import org.hl7.fhir.r4.model.Patient;
 import org.hl7.fhir.r4.model.Specimen;
-import org.hl7.fhir.r4.model.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ca.uhn.fhir.model.primitive.DateTimeDt;
 import de.samply.directory_sync.StarModelData;
 import de.samply.directory_sync.Util;
 import de.samply.directory_sync.directory.model.BbmriEricId;
@@ -39,6 +35,13 @@ public class PopulateStarModelInputData {
     this.fhirApi = fhirApi;
   }
 
+  /**
+   * Populates a Star Model input data object based on specimens fetched from the FHIR server,
+   * grouped according to the specified default BBMRI-ERIC collection ID.
+   *
+   * @param defaultBbmriEricCollectionId The default BBMRI-ERIC collection ID to group specimens. May be null.
+   * @return A StarModelData object populated with data extracted from the fetched specimens.
+   */
   public StarModelData populate(BbmriEricId defaultBbmriEricCollectionId) {
     // Group specimens according to collection.
     Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollectionOutcome = fhirApi.fetchSpecimensByCollection(defaultBbmriEricCollectionId);
@@ -55,11 +58,30 @@ public class PopulateStarModelInputData {
     return starModelInputData;
   }
 
+  /**
+   * Populates the Star Model input data with information extracted from a list of specimens
+   * associated with a specific collection.
+   *
+   * @param starModelInputData The Star Model input data to be populated.
+   * @param collectionId The identifier for the collection to which the specimens belong.
+   * @param specimens The list of specimens from which to extract data and populate the input data.
+   *
+   * @throws NullPointerException if starModelInputData, collectionId, or specimens is null.
+   */
   private void populateCollection(StarModelData starModelInputData, String collectionId, List<Specimen> specimens) {
     for (Specimen specimen: specimens)
       populateSpecimen(starModelInputData, collectionId, specimen);
   }
 
+  /**
+   * Populates the Star Model input data with information extracted from a single specimen.
+   *
+   * @param starModelInputData The Star Model input data to be populated.
+   * @param collectionId The identifier for the collection to which the specimen belongs.
+   * @param specimen The specimen from which to extract data and populate the input data.
+   *
+   * @throws NullPointerException if starModelInputData, collectionId, or specimen is null.
+   */
   private void populateSpecimen(StarModelData starModelInputData, String collectionId, Specimen specimen) {
     // Get the Patient who donated the sample
     Patient patient = fhirApi.extractPatientFromSpecimen(specimen);
@@ -74,10 +96,21 @@ public class PopulateStarModelInputData {
 
     List<String> diagnoses = extractDiagnosesFromPatientAndSpecimen(patient, specimen);
 
+    // Add all of the collected information to the input data table.
     for (String diagnosis: diagnoses)
       starModelInputData.addInputRow(collectionId, starModelInputData.newInputRow(row, diagnosis));
   }
 
+  /**
+   * Determines the patient's age at the time of specimen collection.
+   *
+   * @param patient The FHIR Patient object from which to retrieve the birth date.
+   * @param specimen The FHIR Specimen object from which to extract the collection date.
+   * @return The patient's age at the time of specimen collection in years, or null if the age calculation fails.
+   *
+   * @throws NullPointerException if either patient or specimen is null.
+   * @throws RuntimeException if an unexpected error occurs during the age calculation.
+   */
   private String determinePatientAgeAtCollection(Patient patient, Specimen specimen) {
     String age = null;
 
@@ -103,7 +136,16 @@ public class PopulateStarModelInputData {
 
     return age;
   }
-  
+
+  /**
+   * Extracts the collection date as a LocalDate from the given FHIR Specimen.
+   * If the Specimen is null or does not have a collection date, it returns null.
+   *
+   * @param specimen The FHIR Specimen object from which to extract the collection date.
+   * @return The collection date as a LocalDate, or null if the specimen is null or lacks a collection date.
+   *
+   * @throws NullPointerException if specimen is null.
+   */
   private LocalDate extractCollectionLocalDateFromSpecimen(Specimen specimen) {
     // Check if the specimen is null or has no collection date
     if (specimen == null || !specimen.hasCollection()) {
@@ -121,6 +163,16 @@ public class PopulateStarModelInputData {
         return null;
   }
 
+  /**
+   * Extracts unique diagnoses associated with a given Patient and Specimen.
+   * This method combines diagnoses obtained from the Patient's conditions and Specimen's diagnoses.
+   *
+   * @param patient The FHIR Patient object from which to extract diagnoses.
+   * @param specimen The FHIR Specimen object from which to extract diagnoses.
+   * @return A List of unique diagnoses associated with the given Patient and Specimen.
+   *
+   * @throws NullPointerException if either patient or specimen is null.
+   */
   private List<String> extractDiagnosesFromPatientAndSpecimen(Patient patient, Specimen specimen) {
     // Find any diagnoses associated with this patient
     List<String> patientConditionCodes = fhirApi.extractConditionCodesFromPatient(patient);

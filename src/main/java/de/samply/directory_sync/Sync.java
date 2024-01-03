@@ -178,18 +178,36 @@ public class Sync {
         }
     }
 
+    /**
+     * Sends updates for Star Model data to the Directory service, based on FHIR store information.
+     * This method fetches Star Model input data from the FHIR store, generates star model fact tables,
+     * performs diagnosis corrections, and then updates the Directory service with the prepared data.
+     * <p>
+     * The method handles errors by returning a list of OperationOutcome objects describing the issues.
+     * </p>
+     *
+     * @param defaultCollectionId The default BBMRI-ERIC collection ID for fetching data from the FHIR store.
+     * @param minDonors The minimum number of donors required for a fact to be included in the star model output.
+     * @return A list of OperationOutcome objects indicating the outcome of the star model updates.
+     *
+     * @throws IllegalArgumentException if the defaultCollectionId is not a valid BbmriEricId.
+     */
     public List<OperationOutcome> sendStarModelUpdatesToDirectory(String defaultCollectionId, int minDonors) {
         try {
             BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
                 .valueOf(defaultCollectionId)
                 .orElse(null);
 
+            // Pull data from the FHIR store and save it in a format suitable for generating
+            // star model hypercubes.
             Either<OperationOutcome, StarModelData> starModelInputDataOutcome = fhirReporting.fetchStarModelInputData(defaultBbmriEricCollectionId);
             if (starModelInputDataOutcome.isLeft())
                 return createErrorOutcome("Problem getting star model information from FHIR store, " + errorMessageFromOperationOutcome(starModelInputDataOutcome.getLeft()));
 
             StarModelData starModelInputData = starModelInputDataOutcome.get();
 
+            // Hpercubes containing less than the minimum number of donors will not be
+            // included in the star model output.
             starModelInputData.setMinDonors(minDonors);
 
             // Take the patient list and the specimen list from starModelInputData and

@@ -313,6 +313,16 @@ public class DirectoryApi {
     return request;
   }
 
+  /**
+   * Updates the Star Model data in the Directory service based on the provided StarModelInputData.
+   * 
+   * Before sending any star model data to the Directory, the original
+   * star model data for all known collections will be deleted from the
+   * Directory.
+   *
+   * @param starModelInputData The input data for updating the Star Model.
+   * @return An OperationOutcome indicating the success or failure of the update.
+   */
   public OperationOutcome updateStarModel(StarModelData starModelInputData) {
     // Get rid of previous star models first. This is necessary, because:
     // 1. A new star model may be decomposed into different hypercubes.
@@ -337,6 +347,12 @@ public class DirectoryApi {
     }
   }
 
+  /**
+   * Constructs an HTTP POST request for updating Star Model data based on the provided StarModelInputData.
+   *
+   * @param starModelInputData The input data for the update request.
+   * @return An HttpPost request object.
+   */
   private HttpPost updateStarModelRequest(StarModelData starModelInputData) {
     HttpPost request = new HttpPost(buildApiUrl(starModelInputData.getCountryCode(), "facts"));
     // Directory likes to have its data wrapped in a map with key "entities".
@@ -350,6 +366,12 @@ public class DirectoryApi {
     return request;
   }
 
+  /**
+   * Deletes existing star models from the Directory service for each of the collection IDs in the supplied StarModelInputData object.
+   *
+   * @param starModelInputData The input data for deleting existing star models.
+   * @return An OperationOutcome indicating the success or failure of the deletion.
+   */
   private OperationOutcome deleteStarModel(StarModelData starModelInputData) {
     String apiUrl = buildApiUrl(starModelInputData.getCountryCode(), "facts");
 
@@ -377,6 +399,13 @@ public class DirectoryApi {
     return new OperationOutcome();
   }
 
+  /**
+   * Fetches the fact wrapper object by collection from the Directory service.
+   *
+   * @param apiUrl        The base URL for the Directory API.
+   * @param collectionId  The ID of the collection for which to fetch the fact wrapper.
+   * @return A Map representing the fact wrapper retrieved from the Directory service.
+   */
   public Map fetchFactWrapperByCollection(String apiUrl, String collectionId) {
     Map body = null;
     try {
@@ -398,6 +427,13 @@ public class DirectoryApi {
     return body;
   }
 
+  /**
+   * Constructs an HTTP GET request for fetching the fact wrapper object by collection from the Directory service.
+   *
+   * @param apiUrl        The base URL for the Directory API.
+   * @param collectionId  The ID of the collection for which to fetch the fact wrapper.
+   * @return An HttpGet request object.
+   */
   private HttpGet fetchFactWrapperByCollectionRequest(String apiUrl, String collectionId) {
     String url = apiUrl + "?q=collection=='" + collectionId + "'";
     HttpGet request = new HttpGet(url);
@@ -407,6 +443,13 @@ public class DirectoryApi {
     return request;
   }
 
+  /**
+   * Deletes facts from the Directory service based on a list of fact IDs.
+   *
+   * @param apiUrl    The base URL for the Directory API.
+   * @param factIds   The list of fact IDs to be deleted.
+   * @return An OperationOutcome indicating the success or failure of the deletion.
+   */
   public OperationOutcome deleteFactsByIds(String apiUrl, List<String> factIds) {
     if (factIds.size() == 0)
       // Nothing to delete
@@ -425,6 +468,13 @@ public class DirectoryApi {
     }
   }
 
+  /**
+   * Constructs an HTTP DELETE request with a request body for deleting facts by IDs from the Directory service.
+   *
+   * @param apiUrl    The base URL for the Directory API.
+   * @param factIds   The list of fact IDs to be deleted.
+   * @return An HttpDeleteWithBody request object.
+   */
   private HttpDeleteWithBody deleteFactsByIdsRequest(String apiUrl, List<String> factIds) {
     HttpDeleteWithBody request = new HttpDeleteWithBody(apiUrl);
     // Directory likes to have its delete data wrapped in a map with key "entityIds".
@@ -438,6 +488,10 @@ public class DirectoryApi {
     return request;
   }
 
+  /**
+   * Custom HTTP DELETE request with a request body support.
+   * Used for sending delete requests with a request body to the Directory service.
+   */
   class HttpDeleteWithBody extends HttpEntityEnclosingRequestBase {
     public static final String METHOD_NAME = "DELETE";
 
@@ -460,7 +514,21 @@ public class DirectoryApi {
         return METHOD_NAME;
     }
   }
-
+  
+  /**
+   * Collects diagnosis corrections for the StarModelInputData. These are
+   * stored in the diagnoses map.
+   * 
+   * It checks with the Directory if the diagnosis codes are valid ICD values and corrects them if necessary.
+   * 
+   * Two levels of correction are possible:
+   * 
+   * 1. If the full code is not correct, remove the number after the period and try again. If the new truncated code is OK, use it to replace the existing diagnosis.
+   * 2. If that doesn't work, replace the existing diagnosis with null.
+   *
+   * @param starModelInputData The input data containing diagnoses to be corrected.
+   * @return An OperationOutcome indicating the success or failure of the diagnosis corrections.
+   */
   public OperationOutcome collectStarModelDiagnosisCorrections(StarModelData starModelInputData) {
     Map<String, String> diagnoses = starModelInputData.getDiagnoses();
     for (String diagnosis: diagnoses.keySet())
@@ -475,6 +543,12 @@ public class DirectoryApi {
     return null;
   }
 
+  /**
+   * Checks if a given diagnosis code is a valid ICD value by querying the Directory service.
+   *
+   * @param diagnosis The diagnosis code to be validated.
+   * @return true if the diagnosis code is a valid ICD value, false if not, or if an error condition was encountered.
+   */
   private boolean isValidIcdValue(String diagnosis) {
     String url = baseUrl + "/api/v2/eu_bbmri_eric_disease_types?q=id=='" + diagnosis + "'";
     try {
@@ -503,6 +577,12 @@ public class DirectoryApi {
     return false;
   }
 
+  /**
+   * Constructs an HTTP GET request for validating an ICD value against the Directory service.
+   *
+   * @param url The URL for validating the ICD value.
+   * @return An HttpGet request object.
+   */
   private HttpGet isValidIcdValueRequest(String url) {
     HttpGet request = new HttpGet(url);
     request.setHeader("x-molgenis-token", token);
