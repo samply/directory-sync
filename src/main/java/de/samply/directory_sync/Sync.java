@@ -1,8 +1,6 @@
 package de.samply.directory_sync;
 
 import ca.uhn.fhir.context.FhirContext;
-import ca.uhn.fhir.rest.client.api.IGenericClient;
-import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 import de.samply.directory_sync.directory.CreateFactTablesFromStarModelInputData;
 import de.samply.directory_sync.directory.DirectoryApi;
 import de.samply.directory_sync.directory.DirectoryService;
@@ -18,18 +16,12 @@ import io.vavr.control.Either;
 import io.vavr.control.Option;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
-import org.apache.http.impl.client.HttpClients;
 import org.hl7.fhir.r4.model.OperationOutcome;
 import org.hl7.fhir.r4.model.Organization;
-import org.hl7.fhir.r4.model.Patient;
-import org.hl7.fhir.r4.model.Specimen;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -39,7 +31,42 @@ import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.ERROR;
 import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.INFORMATION;
 
 /**
- * Provides functionality to synchronize MOLGENIS directory and FHIR server in both directions.
+ * Provides functionality to synchronize between a BBMRI Directory instance and a FHIR store in both directions.
+ * This class provides methods to update biobanks, synchronize collection sizes, generate diagnosis corrections,
+ * send star model updates, and perform aggregated updates to the Directory service based on information from
+ * the FHIR store.
+ * 
+ * Usage:
+ * 
+ * You will need to first do the initial set up of the Sync class, which includes
+ * connecting to the FHIR store and to the Directory. Your code might look something like
+ * this:
+ * 
+ * DirectoryService directoryService = new DirectoryService(DirectoryApi.createWithLogin(HttpClients.createDefault(), directoryUrl, directoryUserName, directoryPassCode));
+ * FhirReporting fhirReporting = new FhirReporting(ctx, fhirApi);
+ * Sync sync = new Sync(fhirApi, fhirReporting, directoryApi, directoryService);
+ * sync.initResources()
+ * 
+ * Next, if your FHIR store does not use WHO ICD 10 codes for diagnosis, you should
+ * first generate a map, mapping your local ICD 10 codes onto WHO, which are used by
+ * the Directory:
+ * 
+ * Map<String, String> correctedDiagnoses = new HashMap<String, String>();
+ * sync.generateDiagnosisCorrections(directoryDefaultCollectionId, correctedDiagnoses); // directoryDefaultCollectionId may be null
+ * 
+ * Now you can start to do some synchronization.
+ * 
+ * Only send the collection sizes to the Directory:
+ * sync.syncCollectionSizesToDirectory
+ * 
+ * Send all standard attributes to Directory:
+ * sync.sendUpdatesToDirectory(directoryDefaultCollectionId, correctedDiagnoses);
+ * 
+ * Send star model to Directory:
+ * sync.sendStarModelUpdatesToDirectory(directoryDefaultCollectionId, correctedDiagnoses, directoryMinDonors); // e.g. directoryMinDonors=10
+ * 
+ * Get biobank information from Directory and put into local FHIR store:
+ * sync.updateAllBiobanksOnFhirServerIfNecessary();
  */
 public class Sync {
   private static final Logger logger = LoggerFactory.getLogger(Sync.class);
@@ -73,6 +100,11 @@ public class Sync {
         System.out.println("collectionSizes = " + collectionSizes);
     }
 
+    /**
+     * Initializes necessary resources for the synchronization process.
+     *
+     * @return An {@link Either} containing either a success message or an error message.
+     */
     public Either<String, Void> initResources() {
         return fhirReporting.initLibrary().flatMap(_void -> fhirReporting.initMeasure());
     }
@@ -189,7 +221,7 @@ public class Sync {
      * </p>
      *
      * @param defaultCollectionId The default BBMRI-ERIC collection ID for fetching data from the FHIR store.
-     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes.
+     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. If null, no correction will be performed.
      * @param minDonors The minimum number of donors required for a fact to be included in the star model output.
      * @return A list of OperationOutcome objects indicating the outcome of the star model updates.
      *
@@ -219,7 +251,8 @@ public class Sync {
 
             // Apply corrections to ICD 10 diagnoses, to make them compatible with
             // the Directory.
-            starModelInputData.applyDiagnosisCorrections(correctedDiagnoses);
+            if (correctedDiagnoses != null)
+                starModelInputData.applyDiagnosisCorrections(correctedDiagnoses);
 
             // Send fact tables to Direcory. Return some kind of results count or whatever
             List<OperationOutcome> starModelUpdateOutcome = directoryService.updateStarModel(starModelInputData);
@@ -245,7 +278,7 @@ public class Sync {
      *  5. Push the new information back to the Directory.
      * 
      * @param defaultCollectionId The default collection ID to use for fetching collections from the FHIR store.
-     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes.
+     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. If null, no correction will be performed.
      * @return A list of OperationOutcome objects indicating the outcome of the update operation.
      */
     public List<OperationOutcome> sendUpdatesToDirectory(String defaultCollectionId, Map<String, String> correctedDiagnoses) {
@@ -274,7 +307,8 @@ public class Sync {
             
             // Apply corrections to ICD 10 diagnoses, to make them compatible with
             // the Directory.
-            directoryCollectionPut.applyDiagnosisCorrections(correctedDiagnoses);
+            if (correctedDiagnoses != null)
+                directoryCollectionPut.applyDiagnosisCorrections(correctedDiagnoses);
 
             return directoryService.updateEntities(directoryCollectionPut);
         } catch (Exception e) {
