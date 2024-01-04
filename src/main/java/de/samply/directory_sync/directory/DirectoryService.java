@@ -68,9 +68,4 @@ public class DirectoryService {
     OperationOutcome operationOutcome = api.updateStarModel(starModelInputData);
     return Collections.singletonList(operationOutcome);
   }
-
-  public OperationOutcome collectStarModelDiagnosisCorrections(StarModelData starModelInputData) {
-    OperationOutcome operationOutcome = api.collectStarModelDiagnosisCorrections(starModelInputData);
-    return operationOutcome;
-  }
 }

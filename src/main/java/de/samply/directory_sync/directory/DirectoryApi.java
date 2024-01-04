@@ -203,7 +203,7 @@ public class DirectoryApi {
   /**
    * Make a call to the Directory to get all Collection IDs for the supplied {@code countryCode}.
    *
-   * @param countryCode the country code of the endpoint of the national node, e.g. Germany
+   * @param countryCode the country code of the endpoint of the national node, e.g. DE
    * @return all the Collections for the national node. E.g. "DE" will return all German collections
    */
   public Either<OperationOutcome, Set<BbmriEricId>> listAllCollectionIds(String countryCode) {
@@ -231,12 +231,12 @@ public class DirectoryApi {
   }
 
   /**
-   * Make API calls to the Directory to get a DirectoryCollectionGet object containing attributes
+   * Make API calls to the Directory to fill a DirectoryCollectionGet object containing attributes
    * for all of the collections listed in collectionIds. The countryCode is used solely for
    * constructing the URL for the API call.
    * 
-   * @param countryCode
-   * @param collectionIds
+   * @param countryCode E.g. "DE".
+   * @param collectionIds IDs of the collections whose data will be harvested.
    * @return
    */
   public Either<OperationOutcome, DirectoryCollectionGet> fetchCollectionGetOutcomes(String countryCode, List<String> collectionIds) {
@@ -281,13 +281,9 @@ public class DirectoryApi {
   }
 
   /**
-   * Send the collection entities to the Directory.
-   * <p>
-   * You need 'update data' permission on entity type
-   * 'Collections' at the Directory in order for this to work.
+   * Send aggregated collection information to the Directory.
    *
-   * @param countryCode
-   * @param entities    the individual entities.
+   * @param directoryCollectionPut Summary information about one or more collections
    * @return an outcome, either successful or an error
    */
   public OperationOutcome updateEntities(DirectoryCollectionPut directoryCollectionPut) {
@@ -516,8 +512,7 @@ public class DirectoryApi {
   }
   
   /**
-   * Collects diagnosis corrections for the StarModelInputData. These are
-   * stored in the diagnoses map.
+   * Collects diagnosis corrections from the Directory.
    * 
    * It checks with the Directory if the diagnosis codes are valid ICD values and corrects them if necessary.
    * 
@@ -526,11 +521,9 @@ public class DirectoryApi {
    * 1. If the full code is not correct, remove the number after the period and try again. If the new truncated code is OK, use it to replace the existing diagnosis.
    * 2. If that doesn't work, replace the existing diagnosis with null.
    *
-   * @param starModelInputData The input data containing diagnoses to be corrected.
-   * @return An OperationOutcome indicating the success or failure of the diagnosis corrections.
+   * @param diagnoses A string map containing diagnoses to be corrected.
    */
-  public OperationOutcome collectStarModelDiagnosisCorrections(StarModelData starModelInputData) {
-    Map<String, String> diagnoses = starModelInputData.getDiagnoses();
+  public void collectDiagnosisCorrections(Map<String, String> diagnoses) {
     for (String diagnosis: diagnoses.keySet())
       if (!isValidIcdValue(diagnosis)) {
         String diagnosisCategory = diagnosis.split("\\.")[0];
@@ -539,8 +532,6 @@ public class DirectoryApi {
         else
           diagnoses.put(diagnosis, null);
       }
-      
-    return null;
   }
 
   /**

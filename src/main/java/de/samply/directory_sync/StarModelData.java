@@ -44,47 +44,6 @@ public class StarModelData {
         this.minDonors = minDonors;
     }
 
-    // Maps diagnosis ICD 10 codes from the FHIR store onto acceptable
-    // values for the Directory.
-    private Map<String,String> diagnoses = new HashMap<String,String>();
-
-    /**
-     * Notes a diagnosis in the internal diagnoses map.
-     * 
-     * @param diagnosis The diagnosis to be noted in the diagnoses map.
-     * 
-     * @throws NullPointerException if diagnosis is null.
-     */
-    private void noteDiagnosis(String diagnosis) {
-        diagnoses.put(diagnosis, diagnosis);
-    }
-
-    /**
-     * Notes a corrected diagnosis associated for an existing diagnosis in the diagnoses map.
-     * If the original diagnosis is present in the map, it is replaced with the new diagnosis.
-     * If the original diagnosis is not present, a new entry is added to the map.
-     * 
-     * @param diagnosis The original diagnosis to be replaced or noted.
-     * @param newDiagnosis The corrected diagnosis to associate with the original diagnosis.
-     * 
-     * @throws NullPointerException if diagnosis or newDiagnosis is null.
-     */
-    public void noteDiagnosis(String diagnosis, String newDiagnosis) {
-        diagnoses.put(diagnosis, newDiagnosis);
-    }
-
-    /**
-     * Retrieves the diagnoses map containing the mapping of diagnoses to corrected diagnoses.
-     * 
-     * @return Diagnosis map.
-     * 
-     * @see #noteDiagnosis(String)
-     * @see #noteDiagnosis(String, String)
-     */    
-    public Map<String, String> getDiagnoses() {
-        return diagnoses;
-    }
-
     public List<Map<String, String>> getInputRowsAsStringMaps(String collectionId) {
         List<Map<String, String>> rowsAsStringMaps = new ArrayList<Map<String, String>>();
         for (InputRow row: inputData.get(collectionId)) {
@@ -262,7 +221,6 @@ public class StarModelData {
      * @throws NullPointerException if row or histLoc is null.
      */
     public InputRow newInputRow(InputRow row, String histLoc) {
-        noteDiagnosis(FhirToDirectoryAttributeConverter.convertDiagnosis(histLoc));
         return new InputRow(row, histLoc);
     }
 
@@ -314,9 +272,10 @@ public class StarModelData {
      * 
      * Note: This method directly modifies the factTables in-place.
      * 
+     * @param diagnoses Maps FHIR diagnoses onto Directory diagnoses.
      * @throws NullPointerException if diagnoses or any fact in factTables is null.
      */
-    public void implementDiagnosisCorrections() {
+    public void applyDiagnosisCorrections(Map<String,String> diagnoses) {
          for (Map<String, String> fact: factTables) {
             if (!fact.containsKey("disease"))
                 continue;

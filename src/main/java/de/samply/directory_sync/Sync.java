@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -129,6 +130,105 @@ public class Sync {
                 .fold(Collections::singletonList, Function.identity());
     }
 
+    /**
+     * Generates corrections to the diagnoses obtained from the FHIR store, to make them
+     * compatible with the Directory. You should supply this method with an empty map
+     * via the correctedDiagnoses variable. This map will be filled by the method and
+     * you can subsequently use it elsewhere.
+     * 
+     * This method performs the following steps:
+     * 
+     * * Retrieves diagnoses from the FHIR store for specimens with identifiable collections and their associated patients.
+     * * Converts raw ICD-10 codes into MIRIAM-compatible codes.
+     * * Collects corrected diagnosis codes from the Directory API based on the MIRIAM-compatible codes.
+     *
+     * @param defaultCollectionId Default collection ID. May be null.
+     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. You should supply an empty map.
+     * @return A list containing a single OperationOutcome indicating the success of the diagnosis corrections process.
+     *         If any errors occur during the process, an OperationOutcome with error details is returned.
+     */
+    public List<OperationOutcome> generateDiagnosisCorrections(String defaultCollectionId, Map<String, String> correctedDiagnoses) {
+        try {
+            // Convert string version of collection ID into a BBMRI ERIC ID.
+            BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
+                .valueOf(defaultCollectionId)
+                .orElse(null);
+
+            // Get all diagnoses from the FHIR store for specemins with identifiable
+            // collections and their associated patients.
+            Either<OperationOutcome, List<String>> fhirDiagnosesOutcome = fhirReporting.fetchDiagnoses(defaultBbmriEricCollectionId);
+            if (fhirDiagnosesOutcome.isLeft())
+                return createErrorOutcome("Problem getting diagnosis information from FHIR store, " + errorMessageFromOperationOutcome(fhirDiagnosesOutcome.getLeft()));
+            List<String> fhirDiagnoses = fhirDiagnosesOutcome.get();
+
+            // Convert the raw ICD 10 codes into MIRIAM-compatible codes and put the
+            // codes into a map with identical keys and values.
+            fhirDiagnoses.forEach(diagnosis -> {
+                String miriamDiagnosis = FhirToDirectoryAttributeConverter.convertDiagnosis(diagnosis);
+                correctedDiagnoses.put(miriamDiagnosis, miriamDiagnosis);
+            });
+            
+            // Get corrected diagnosis codes from the Directory
+            directoryApi.collectDiagnosisCorrections(correctedDiagnoses);
+
+            // Return a successful outcome.
+            OperationOutcome outcome = new OperationOutcome();
+            outcome.addIssue().setSeverity(INFORMATION).setDiagnostics("Diagnosis corrections generated successfully");
+            return Collections.singletonList(outcome);
+        } catch (Exception e) {
+            return createErrorOutcome("generateDiagnosisCorrections - unexpected error: " + Util.traceFromException(e));
+        }
+    }
+
+    /**
+     * Sends updates for Star Model data to the Directory service, based on FHIR store information.
+     * This method fetches Star Model input data from the FHIR store, generates star model fact tables,
+     * performs diagnosis corrections, and then updates the Directory service with the prepared data.
+     * <p>
+     * The method handles errors by returning a list of OperationOutcome objects describing the issues.
+     * </p>
+     *
+     * @param defaultCollectionId The default BBMRI-ERIC collection ID for fetching data from the FHIR store.
+     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes.
+     * @param minDonors The minimum number of donors required for a fact to be included in the star model output.
+     * @return A list of OperationOutcome objects indicating the outcome of the star model updates.
+     *
+     * @throws IllegalArgumentException if the defaultCollectionId is not a valid BbmriEricId.
+     */
+    public List<OperationOutcome> sendStarModelUpdatesToDirectory(String defaultCollectionId, Map<String, String> correctedDiagnoses, int minDonors) {
+        try {
+            BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
+                .valueOf(defaultCollectionId)
+                .orElse(null);
+
+            // Pull data from the FHIR store and save it in a format suitable for generating
+            // star model hypercubes.
+            Either<OperationOutcome, StarModelData> starModelInputDataOutcome = fhirReporting.fetchStarModelInputData(defaultBbmriEricCollectionId);
+            if (starModelInputDataOutcome.isLeft())
+                return createErrorOutcome("Problem getting star model information from FHIR store, " + errorMessageFromOperationOutcome(starModelInputDataOutcome.getLeft()));
+
+            StarModelData starModelInputData = starModelInputDataOutcome.get();
+
+            // Hpercubes containing less than the minimum number of donors will not be
+            // included in the star model output.
+            starModelInputData.setMinDonors(minDonors);
+
+            // Take the patient list and the specimen list from starModelInputData and
+            // use them to generate the star model fact tables.
+            CreateFactTablesFromStarModelInputData.createFactTables(starModelInputData);
+
+            // Apply corrections to ICD 10 diagnoses, to make them compatible with
+            // the Directory.
+            starModelInputData.applyDiagnosisCorrections(correctedDiagnoses);
+
+            // Send fact tables to Direcory. Return some kind of results count or whatever
+            List<OperationOutcome> starModelUpdateOutcome = directoryService.updateStarModel(starModelInputData);
+            return starModelUpdateOutcome;
+        } catch (Exception e) {
+            return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
+        }
+    }
+    
      /**
      * Take information from the FHIR store and send aggregated updates to the Directory.
      * 
@@ -145,10 +245,10 @@ public class Sync {
      *  5. Push the new information back to the Directory.
      * 
      * @param defaultCollectionId The default collection ID to use for fetching collections from the FHIR store.
-     * @param country The country to which the updates are targeted.
+     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes.
      * @return A list of OperationOutcome objects indicating the outcome of the update operation.
      */
-    public List<OperationOutcome> sendUpdatesToDirectory(String defaultCollectionId) {
+    public List<OperationOutcome> sendUpdatesToDirectory(String defaultCollectionId, Map<String, String> correctedDiagnoses) {
         try {
             BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
                 .valueOf(defaultCollectionId)
@@ -171,6 +271,10 @@ public class Sync {
             DirectoryCollectionGet directoryCollectionGet = directoryCollectionGetOutcomes.get();
             if (!MergeDirectoryCollectionGetToDirectoryCollectionPut.merge(directoryCollectionGet, directoryCollectionPut))
                 return createErrorOutcome("Problem merging Directory GET attributes to Directory PUT attributes");
+            
+            // Apply corrections to ICD 10 diagnoses, to make them compatible with
+            // the Directory.
+            directoryCollectionPut.applyDiagnosisCorrections(correctedDiagnoses);
 
             return directoryService.updateEntities(directoryCollectionPut);
         } catch (Exception e) {
@@ -178,55 +282,6 @@ public class Sync {
         }
     }
 
-    /**
-     * Sends updates for Star Model data to the Directory service, based on FHIR store information.
-     * This method fetches Star Model input data from the FHIR store, generates star model fact tables,
-     * performs diagnosis corrections, and then updates the Directory service with the prepared data.
-     * <p>
-     * The method handles errors by returning a list of OperationOutcome objects describing the issues.
-     * </p>
-     *
-     * @param defaultCollectionId The default BBMRI-ERIC collection ID for fetching data from the FHIR store.
-     * @param minDonors The minimum number of donors required for a fact to be included in the star model output.
-     * @return A list of OperationOutcome objects indicating the outcome of the star model updates.
-     *
-     * @throws IllegalArgumentException if the defaultCollectionId is not a valid BbmriEricId.
-     */
-    public List<OperationOutcome> sendStarModelUpdatesToDirectory(String defaultCollectionId, int minDonors) {
-        try {
-            BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
-                .valueOf(defaultCollectionId)
-                .orElse(null);
-
-            // Pull data from the FHIR store and save it in a format suitable for generating
-            // star model hypercubes.
-            Either<OperationOutcome, StarModelData> starModelInputDataOutcome = fhirReporting.fetchStarModelInputData(defaultBbmriEricCollectionId);
-            if (starModelInputDataOutcome.isLeft())
-                return createErrorOutcome("Problem getting star model information from FHIR store, " + errorMessageFromOperationOutcome(starModelInputDataOutcome.getLeft()));
-
-            StarModelData starModelInputData = starModelInputDataOutcome.get();
-
-            // Hpercubes containing less than the minimum number of donors will not be
-            // included in the star model output.
-            starModelInputData.setMinDonors(minDonors);
-
-            // Take the patient list and the specimen list from starModelInputData and
-            // use them to generate the star model fact tables.
-            CreateFactTablesFromStarModelInputData.createFactTables(starModelInputData);
-
-            // Check all of the ICD 10 values to see if they are known to the Directory
-            // and deal with them appropriately if not.
-            directoryService.collectStarModelDiagnosisCorrections(starModelInputData);
-            starModelInputData.implementDiagnosisCorrections();
-
-            // Send fact tables to Direcory. Return some kind of results count or whatever
-            List<OperationOutcome> starModelUpdateOutcome = directoryService.updateStarModel(starModelInputData);
-            return starModelUpdateOutcome;
-        } catch (Exception e) {
-            return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
-        }
-    }
-    
     private String errorMessageFromOperationOutcome(OperationOutcome operationOutcome) {
         return operationOutcome.getIssue().stream()
                 .filter(issue -> issue.getSeverity() == OperationOutcome.IssueSeverity.ERROR || issue.getSeverity() == OperationOutcome.IssueSeverity.FATAL)

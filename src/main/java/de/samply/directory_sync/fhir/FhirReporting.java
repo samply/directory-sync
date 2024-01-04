@@ -32,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.checkerframework.checker.units.qual.g;
 import org.hl7.fhir.instance.model.api.IBaseResource;
@@ -219,45 +220,88 @@ public class FhirReporting {
     updateFhirCollectionsWithPatientData(fhirCollectionMap, patientsByCollectionOutcome.get());
 
     return Either.right(new ArrayList<FhirCollection>(fhirCollectionMap.values()));
-}
+  }
 
-private void updateFhirCollectionsWithSpecimenData(Map<String,FhirCollection> entities, Map<String, List<Specimen>> specimensByCollection) {
-    for (String key: specimensByCollection.keySet()) {
-        List<Specimen> specimenList = specimensByCollection.get(key);
-        FhirCollection fhirCollection = entities.getOrDefault(key, new FhirCollection());
-        fhirCollection.setId(key);
-        fhirCollection.setSize(specimenList.size());
-        fhirCollection.setMaterials(extractMaterialsFromSpecimenList(specimenList));
-        fhirCollection.setStorageTemperatures(extractStorageTemperaturesFromSpecimenList(specimenList));
-        fhirCollection.setDiagnosisAvailable(extractDiagnosesFromSpecimenList(specimenList));
-        entities.put(key, fhirCollection);
-    }
-}
+  private void updateFhirCollectionsWithSpecimenData(Map<String,FhirCollection> entities, Map<String, List<Specimen>> specimensByCollection) {
+      for (String key: specimensByCollection.keySet()) {
+          List<Specimen> specimenList = specimensByCollection.get(key);
+          FhirCollection fhirCollection = entities.getOrDefault(key, new FhirCollection());
+          fhirCollection.setId(key);
+          fhirCollection.setSize(specimenList.size());
+          fhirCollection.setMaterials(extractMaterialsFromSpecimenList(specimenList));
+          fhirCollection.setStorageTemperatures(extractStorageTemperaturesFromSpecimenList(specimenList));
+          fhirCollection.setDiagnosisAvailable(extractDiagnosesFromSpecimenList(specimenList));
+          entities.put(key, fhirCollection);
+      }
+  }
 
-private void updateFhirCollectionsWithPatientData(Map<String,FhirCollection> entities, Map<String, List<Patient>> patientsByCollection) {
-    for (String key: patientsByCollection.keySet()) {
-        List<Patient> patientList = patientsByCollection.get(key);
-        FhirCollection fhirCollection = entities.getOrDefault(key, new FhirCollection());
-        fhirCollection.setNumberOfDonors(patientList.size());
-        fhirCollection.setSex(extractSexFromPatientList(patientList));
-        fhirCollection.setAgeLow(extractAgeLowFromPatientList(patientList));
-        fhirCollection.setAgeHigh(extractAgeHighFromPatientList(patientList));
-        entities.put(key, fhirCollection);
-    }
-}
+  private void updateFhirCollectionsWithPatientData(Map<String,FhirCollection> entities, Map<String, List<Patient>> patientsByCollection) {
+      for (String key: patientsByCollection.keySet()) {
+          List<Patient> patientList = patientsByCollection.get(key);
+          FhirCollection fhirCollection = entities.getOrDefault(key, new FhirCollection());
+          fhirCollection.setNumberOfDonors(patientList.size());
+          fhirCollection.setSex(extractSexFromPatientList(patientList));
+          fhirCollection.setAgeLow(extractAgeLowFromPatientList(patientList));
+          fhirCollection.setAgeHigh(extractAgeHighFromPatientList(patientList));
+          entities.put(key, fhirCollection);
+      }
+  }
 
-public Either<OperationOutcome, StarModelData> fetchStarModelInputData(BbmriEricId defaultBbmriEricCollectionId) {
-    PopulateStarModelInputData populateStarModelInputData = new PopulateStarModelInputData(fhirApi);
-    StarModelData starModelInputData = populateStarModelInputData.populate(defaultBbmriEricCollectionId);
+  public Either<OperationOutcome, StarModelData> fetchStarModelInputData(BbmriEricId defaultBbmriEricCollectionId) {
+      PopulateStarModelInputData populateStarModelInputData = new PopulateStarModelInputData(fhirApi);
+      StarModelData starModelInputData = populateStarModelInputData.populate(defaultBbmriEricCollectionId);
 
-    return Either.right(starModelInputData);
-}
+      return Either.right(starModelInputData);
+  }
+  
+  /**
+   * Fetches diagnoses from Specimens and Patients to which collections can be assigned.
+   *
+   * This method retrieves specimens grouped by collection.
+   * 
+   * It then extracts diagnoses from Specimen extensions and Patient condition codes, eliminating duplicates,
+   * and combines the results into a list of unique diagnoses.
+   *
+   * @param defaultBbmriEricCollectionId The BBMRI ERIC collection ID to fetch specimens and diagnoses.
+   * @return Either an OperationOutcome indicating an error or a List of unique diagnoses.
+   *         If an error occurs during the fetching process, an OperationOutcome with an error message is returned.
+   *         Otherwise, a List of unique diagnoses is returned.
+   */
+  public Either<OperationOutcome, List<String>> fetchDiagnoses(BbmriEricId defaultBbmriEricCollectionId) {
+    // Group specimens according to collection.
+    Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollectionOutcome = fhirApi.fetchSpecimensByCollection(defaultBbmriEricCollectionId);
+    if (specimensByCollectionOutcome.isLeft())
+      return Either.left(createOutcomeWithError("Problem finding specimens"));
+    Map<String, List<Specimen>> specimensByCollection = specimensByCollectionOutcome.get();
 
-private OperationOutcome createOutcomeWithError(String message) {
-    OperationOutcome outcome = new OperationOutcome();
-    outcome.addIssue().setSeverity(ERROR).setDiagnostics(message);
-    return outcome;
-}
+    // Get diagnoses from Specimen extensions
+    List<String> diagnoses = specimensByCollection.values().stream()
+      .flatMap(List::stream)
+      .map(s -> fhirApi.extractDiagnosesFromSpecimen(s))
+      .flatMap(List::stream)
+      .collect(Collectors.toList());
+
+    // Get diagnoses from Patients
+    List<String> patientDiagnoses = specimensByCollection.values().stream()
+      .flatMap(List::stream)
+      .map(s -> fhirApi.extractConditionCodesFromPatient(fhirApi.extractPatientFromSpecimen(s)))
+      .flatMap(List::stream)
+      .collect(Collectors.toList());
+
+    // Combine diagnoses from specimens and patients, ensuring that there
+    // are no duplicates.
+    diagnoses = Stream.concat(diagnoses.stream(), patientDiagnoses.stream())
+      .distinct()
+      .collect(Collectors.toList());
+
+    return Either.right(diagnoses);
+  }
+
+  private OperationOutcome createOutcomeWithError(String message) {
+      OperationOutcome outcome = new OperationOutcome();
+      outcome.addIssue().setSeverity(ERROR).setDiagnostics(message);
+      return outcome;
+  }
 
   private List<String> extractMaterialsFromSpecimenList(List<Specimen> specimens) {
     return specimens.stream()

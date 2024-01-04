@@ -3,6 +3,7 @@ package de.samply.directory_sync.directory.model;
 import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -24,79 +25,80 @@ public class DirectoryCollectionPut extends HashMap {
   private static final Logger logger = LoggerFactory.getLogger(DirectoryCollectionPut.class);
 
   public DirectoryCollectionPut() {
+        // Initializes the list of entities.
         this.put("entities", new ArrayList<Entity>());
     }
 
-    public void setCountry(String id, String country) {
-        getEntity(id).setCountry(country);
+    public void setCountry(String collectionId, String country) {
+        getEntity(collectionId).setCountry(country);
     }
 
-    public void setName(String id, String name) {
-        getEntity(id).setName(name);
+    public void setName(String collectionId, String name) {
+        getEntity(collectionId).setName(name);
     }
 
-    public void setDescription(String id, String description) {
-        getEntity(id).setDescription(description);
+    public void setDescription(String collectionId, String description) {
+        getEntity(collectionId).setDescription(description);
     }
 
-    public void setContact(String id, String contact) {
-        getEntity(id).setContact(contact);
+    public void setContact(String collectionId, String contact) {
+        getEntity(collectionId).setContact(contact);
     }
 
-    public void setBiobank(String id, String biobank) {
-        getEntity(id).setBiobank(biobank);
+    public void setBiobank(String collectionId, String biobank) {
+        getEntity(collectionId).setBiobank(biobank);
     }
 
-    public void setSize(String id, Integer size) {
-        getEntity(id).setSize(size);
+    public void setSize(String collectionId, Integer size) {
+        getEntity(collectionId).setSize(size);
     }
 
-    public void setOrderOfMagnitude(String id, Integer size) {
-        getEntity(id).setOrderOfMagnitude(size);
+    public void setOrderOfMagnitude(String collectionId, Integer size) {
+        getEntity(collectionId).setOrderOfMagnitude(size);
     }
 
-    public void setNumberOfDonors(String id, Integer size) {
-        getEntity(id).setNumberOfDonors(size);
+    public void setNumberOfDonors(String collectionId, Integer size) {
+        getEntity(collectionId).setNumberOfDonors(size);
     }
 
-    public void setOrderOfMagnitudeDonors(String id, Integer size) {
-        getEntity(id).setOrderOfMagnitudeDonors(size);
+    public void setOrderOfMagnitudeDonors(String collectionId, Integer size) {
+        getEntity(collectionId).setOrderOfMagnitudeDonors(size);
     }
 
-    public void setType(String id, List<String> type) {
-        getEntity(id).setType(type);
+    public void setType(String collectionId, List<String> type) {
+        getEntity(collectionId).setType(type);
     }
 
-    public void setDataCategories(String id, List<String> dataCategories) {
-        getEntity(id).setDataCategories(dataCategories);
+    public void setDataCategories(String collectionId, List<String> dataCategories) {
+        getEntity(collectionId).setDataCategories(dataCategories);
     }
 
-    public void setNetworks(String id, List<String> networks) {
-        getEntity(id).setNetworks(networks);
+    public void setNetworks(String collectionId, List<String> networks) {
+        getEntity(collectionId).setNetworks(networks);
     }
 
-    public void setSex(String id, List<String> sex) {
-        getEntity(id).setSex(sex);
+    public void setSex(String collectionId, List<String> sex) {
+        getEntity(collectionId).setSex(sex);
     }
 
-    public void setAgeLow(String id, Integer value) {
-        getEntity(id).setAgeLow(value);
+    public void setAgeLow(String collectionId, Integer value) {
+        getEntity(collectionId).setAgeLow(value);
     }
 
-    public void setAgeHigh(String id, Integer value) {
-        getEntity(id).setAgeHigh(value);
+    public void setAgeHigh(String collectionId, Integer value) {
+        getEntity(collectionId).setAgeHigh(value);
     }
 
-    public void setMaterials(String id, List<String> value) {
-        getEntity(id).setMaterials(value);
+    public void setMaterials(String collectionId, List<String> value) {
+        getEntity(collectionId).setMaterials(value);
     }
 
-    public void setStorageTemperatures(String id, List<String> value) {
-        getEntity(id).setStorageTemperatures(value);
+    public void setStorageTemperatures(String collectionId, List<String> value) {
+        getEntity(collectionId).setStorageTemperatures(value);
     }
 
-    public void setDiagnosisAvailable(String id, List<String> value) {
-        getEntity(id).setDiagnosisAvailable(value);
+    public void setDiagnosisAvailable(String collectionId, List<String> value) {
+        getEntity(collectionId).setDiagnosisAvailable(value);
     }
 
     public List<String> getCollectionIds() {
@@ -136,32 +138,62 @@ public class DirectoryCollectionPut extends HashMap {
         return (List<Entity>) get("entities");
     }
 
-    private Entity getEntity(String id) {
+    /**
+     * Retrieves or creates an Entity with the specified collection ID.
+     *
+     * This method searches through the existing entities to find one with a matching
+     * ID. If found, the existing entity is returned; otherwise, a new Entity is created
+     * with the given collection ID and added to the list of entities.
+     *
+     * @param collectionId The unique identifier for the Entity.
+     * @return The Entity with the specified collection ID. If not found, a new Entity
+     *         is created and returned.
+     */
+    private Entity getEntity(String collectionId) {
         Entity entity = null;
 
         for (Entity e: getEntities())
-            if (e.get("id").equals(id)) {
+            if (e.get("id").equals(collectionId)) {
                 entity = e;
                 break;
             }
 
         if (entity == null) {
-            entity = new Entity(id);
+            entity = new Entity(collectionId);
             this.getEntities().add(entity);
         }
 
         return entity;
     }
 
+    /**
+     * Represents an entity with attributes related to a collection.
+     * This class extends HashMap<String, Object> to store key-value pairs.
+     */
     public class Entity extends HashMap<String, Object> {
-        public Entity(String id) {
-            setId(id);
+        /**
+         * Constructs an Entity with the specified collection ID.
+         *
+         * @param collectionId The unique identifier for the Entity.
+         */
+        public Entity(String collectionId) {
+            setId(collectionId);
         }
 
-        public void setId(String id) {
-            put("id", id);
+        /**
+         * Sets the collection ID for the Entity.
+         *
+         * @param collectionId The unique identifier for the Entity.
+         */
+        public void setId(String collectionId) {
+            put("id", collectionId);
         }
 
+        /**
+         * Retrieves the collection ID of the Entity.
+         *
+         * @return The collection ID.
+         */
         public String getId() {
             return (String) get("id");
         }
@@ -288,6 +320,31 @@ public class DirectoryCollectionPut extends HashMap {
                 diagnoses = new ArrayList<String>();
 
             put("diagnosis_available", diagnoses);
+        }
+
+        public List<String> getDiagnosisAvailable() {
+            return (List<String>) get("diagnosis_available");
+        }
+    }
+    
+    /**
+     * Applies corrections to the available diagnoses of each Entity based on a provided map.
+     * The method iterates through the list of entities and updates the available diagnoses
+     * using the provided map of corrections.
+     *
+     * @param correctedDiagnoses A map containing diagnosis corrections, where the keys
+     *                           represent the original diagnoses and the values represent
+     *                           the corrected diagnoses.
+     */
+    public void applyDiagnosisCorrections(Map<String, String> correctedDiagnoses) {
+        for (Entity entity: getEntities()) {
+            List<String> directoryDiagnoses = new ArrayList<String>();
+            for (String diagnosis: entity.getDiagnosisAvailable())
+                if (diagnosis != null
+                    && correctedDiagnoses.containsKey(diagnosis)
+                    && correctedDiagnoses.get(diagnosis) != null)
+                    directoryDiagnoses.add(correctedDiagnoses.get(diagnosis));
+            entity.setDiagnosisAvailable(directoryDiagnoses);
         }
     }
 }

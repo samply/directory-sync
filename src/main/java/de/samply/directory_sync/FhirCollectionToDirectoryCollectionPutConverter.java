@@ -42,7 +42,8 @@ public class FhirCollectionToDirectoryCollectionPutConverter {
       convertAgeHigh(directoryCollectionPut, fhirCollection);
       convertMaterials(directoryCollectionPut, fhirCollection);
       convertStorageTemperatures(directoryCollectionPut, fhirCollection);
-      convertDiagnosisAvailableEmpty(directoryCollectionPut, fhirCollection);
+      // convertDiagnosisAvailableEmpty(directoryCollectionPut, fhirCollection);
+      convertDiagnosisAvailable(directoryCollectionPut, fhirCollection);
     } catch(Exception e) {
         logger.error("Problem converting FHIR attributes to Directory attributes. " + Util.traceFromException(e));
         return null;
