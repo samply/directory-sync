@@ -279,13 +279,17 @@ public class FhirReporting {
       .flatMap(List::stream)
       .map(s -> fhirApi.extractDiagnosesFromSpecimen(s))
       .flatMap(List::stream)
+      .distinct()
       .collect(Collectors.toList());
 
     // Get diagnoses from Patients
-    List<String> patientDiagnoses = specimensByCollection.values().stream()
+    Either<OperationOutcome, Map<String, List<Patient>>> patientsByCollectionOutcome = fhirApi.fetchPatientsByCollection(specimensByCollection);
+    Map<String, List<Patient>> patientsByCollection = patientsByCollectionOutcome.get();
+    List<String> patientDiagnoses = patientsByCollection.values().stream()
       .flatMap(List::stream)
-      .map(s -> fhirApi.extractConditionCodesFromPatient(fhirApi.extractPatientFromSpecimen(s)))
+      .map(s -> fhirApi.extractConditionCodesFromPatient(s))
       .flatMap(List::stream)
+      .distinct()
       .collect(Collectors.toList());
 
     // Combine diagnoses from specimens and patients, ensuring that there

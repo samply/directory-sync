@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -187,6 +189,15 @@ public class DirectoryCollectionPut extends HashMap {
          */
         public void setId(String collectionId) {
             put("id", collectionId);
+            setTimestamp();
+        }
+
+        public void setTimestamp() {
+            LocalDateTime dateTime = LocalDateTime.now();
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            String formattedDateTime = dateTime.format(formatter);
+
+            put("timestamp", formattedDateTime);
         }
 
         /**
@@ -338,12 +349,11 @@ public class DirectoryCollectionPut extends HashMap {
      */
     public void applyDiagnosisCorrections(Map<String, String> correctedDiagnoses) {
         for (Entity entity: getEntities()) {
-            List<String> directoryDiagnoses = new ArrayList<String>();
-            for (String diagnosis: entity.getDiagnosisAvailable())
-                if (diagnosis != null
-                    && correctedDiagnoses.containsKey(diagnosis)
-                    && correctedDiagnoses.get(diagnosis) != null)
-                    directoryDiagnoses.add(correctedDiagnoses.get(diagnosis));
+            List<String> directoryDiagnoses = entity.getDiagnosisAvailable().stream()
+                .filter(diagnosis -> diagnosis != null && correctedDiagnoses.containsKey(diagnosis) && correctedDiagnoses.get(diagnosis) != null)
+                .map(correctedDiagnoses::get)
+                .distinct()
+                .collect(Collectors.toList());
             entity.setDiagnosisAvailable(directoryDiagnoses);
         }
     }

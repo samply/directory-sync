@@ -341,6 +341,7 @@ public class DirectoryApi {
     } catch (IOException e) {
       return error("entity update exception", e.getMessage());
     }
+    // return new OperationOutcome();
   }
 
   /**
@@ -373,20 +374,28 @@ public class DirectoryApi {
 
     try {
       for (String collectionId: starModelInputData.getInputCollectionIds()) {
-        // First get a list of fact IDs for this collection
-        Map factWrapper = fetchFactWrapperByCollection(apiUrl, collectionId);
-        if (!factWrapper.containsKey("items"))
-          return error("No facts for collection", collectionId);
-        List<Map<String, String>> facts = (List<Map<String, String>>) factWrapper.get("items");
-        List<String> factIds = facts.stream()
-                            .map(map -> map.get("id"))
-                            .collect(Collectors.toList());
+        List<String> factIds;
+        // Loop until no more facts are left in the Directory.
+        // We need to do things this way, because the Directory implements paging
+        // and a single pass may not get all facts.
+        do {
+          // First get a list of fact IDs for this collection
+          Map factWrapper = fetchFactWrapperByCollection(apiUrl, collectionId);
+          if (!factWrapper.containsKey("items"))
+            return error("Problem getting facts for collection, no item key present: ", collectionId);
+          List<Map<String, String>> facts = (List<Map<String, String>>) factWrapper.get("items");
+          if (facts.size() == 0)
+            break;
+          factIds = facts.stream()
+            .map(map -> map.get("id"))
+            .collect(Collectors.toList());
 
-        // Take the list of fact IDs and delete all of the corresponding facts
-        // at the Directory.
-        OperationOutcome deleteOutcome = deleteFactsByIds(apiUrl, factIds);
-        if (deleteOutcome.getIssue().size() > 0)
-          return deleteOutcome;
+          // Take the list of fact IDs and delete all of the corresponding facts
+          // at the Directory.
+          OperationOutcome deleteOutcome = deleteFactsByIds(apiUrl, factIds);
+          if (deleteOutcome.getIssue().size() > 0)
+            return deleteOutcome;
+        } while (true);
       }
     } catch(Exception e) {
       return error("Exception during delete", Util.traceFromException(e));
@@ -524,7 +533,10 @@ public class DirectoryApi {
    * @param diagnoses A string map containing diagnoses to be corrected.
    */
   public void collectDiagnosisCorrections(Map<String, String> diagnoses) {
-    for (String diagnosis: diagnoses.keySet())
+    int diagnosisCounter = 0; // for diagnostics only
+    for (String diagnosis: diagnoses.keySet()) {
+      if (diagnosisCounter%1000 == 0)
+        logger.info("__________ collectDiagnosisCorrections: diagnosisCounter: " + diagnosisCounter + ", total diagnoses: " + diagnoses.size());
       if (!isValidIcdValue(diagnosis)) {
         String diagnosisCategory = diagnosis.split("\\.")[0];
         if (isValidIcdValue(diagnosisCategory))
@@ -532,6 +544,8 @@ public class DirectoryApi {
         else
           diagnoses.put(diagnosis, null);
       }
+      diagnosisCounter++;
+    }
   }
 
   /**

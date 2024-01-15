@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -162,6 +163,8 @@ public class Sync {
                 .fold(Collections::singletonList, Function.identity());
     }
 
+    private Map<String, String> correctedDiagnoses = null;
+
     /**
      * Generates corrections to the diagnoses obtained from the FHIR store, to make them
      * compatible with the Directory. You should supply this method with an empty map
@@ -179,7 +182,8 @@ public class Sync {
      * @return A list containing a single OperationOutcome indicating the success of the diagnosis corrections process.
      *         If any errors occur during the process, an OperationOutcome with error details is returned.
      */
-    public List<OperationOutcome> generateDiagnosisCorrections(String defaultCollectionId, Map<String, String> correctedDiagnoses) {
+    public List<OperationOutcome> generateDiagnosisCorrections(String defaultCollectionId) {
+        correctedDiagnoses = new HashMap<String, String>();
         try {
             // Convert string version of collection ID into a BBMRI ERIC ID.
             BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
@@ -192,6 +196,7 @@ public class Sync {
             if (fhirDiagnosesOutcome.isLeft())
                 return createErrorOutcome("Problem getting diagnosis information from FHIR store, " + errorMessageFromOperationOutcome(fhirDiagnosesOutcome.getLeft()));
             List<String> fhirDiagnoses = fhirDiagnosesOutcome.get();
+            logger.info("__________ generateDiagnosisCorrections: fhirDiagnoses.size(): " + fhirDiagnoses.size());
 
             // Convert the raw ICD 10 codes into MIRIAM-compatible codes and put the
             // codes into a map with identical keys and values.
@@ -199,9 +204,11 @@ public class Sync {
                 String miriamDiagnosis = FhirToDirectoryAttributeConverter.convertDiagnosis(diagnosis);
                 correctedDiagnoses.put(miriamDiagnosis, miriamDiagnosis);
             });
-            
+            logger.info("__________ generateDiagnosisCorrections: 1 correctedDiagnoses.size(): " + correctedDiagnoses.size());
+
             // Get corrected diagnosis codes from the Directory
             directoryApi.collectDiagnosisCorrections(correctedDiagnoses);
+            logger.info("__________ generateDiagnosisCorrections: 2 correctedDiagnoses.size(): " + correctedDiagnoses.size());
 
             // Return a successful outcome.
             OperationOutcome outcome = new OperationOutcome();
@@ -223,11 +230,13 @@ public class Sync {
      * @param defaultCollectionId The default BBMRI-ERIC collection ID for fetching data from the FHIR store.
      * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. If null, no correction will be performed.
      * @param minDonors The minimum number of donors required for a fact to be included in the star model output.
+     * @param maxFacts The maximum number of facts to be included in the star model output. Negative number means no limit.
      * @return A list of OperationOutcome objects indicating the outcome of the star model updates.
      *
      * @throws IllegalArgumentException if the defaultCollectionId is not a valid BbmriEricId.
      */
-    public List<OperationOutcome> sendStarModelUpdatesToDirectory(String defaultCollectionId, Map<String, String> correctedDiagnoses, int minDonors) {
+    public List<OperationOutcome> sendStarModelUpdatesToDirectory(String defaultCollectionId, int minDonors, int maxFacts) {
+        logger.info("__________ sendStarModelUpdatesToDirectory: minDonors: " + minDonors);
         try {
             BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
                 .valueOf(defaultCollectionId)
@@ -238,8 +247,8 @@ public class Sync {
             Either<OperationOutcome, StarModelData> starModelInputDataOutcome = fhirReporting.fetchStarModelInputData(defaultBbmriEricCollectionId);
             if (starModelInputDataOutcome.isLeft())
                 return createErrorOutcome("Problem getting star model information from FHIR store, " + errorMessageFromOperationOutcome(starModelInputDataOutcome.getLeft()));
-
             StarModelData starModelInputData = starModelInputDataOutcome.get();
+            logger.info("__________ sendStarModelUpdatesToDirectory: number of collection IDs: " + starModelInputData.getInputCollectionIds().size());
 
             // Hpercubes containing less than the minimum number of donors will not be
             // included in the star model output.
@@ -247,18 +256,20 @@ public class Sync {
 
             // Take the patient list and the specimen list from starModelInputData and
             // use them to generate the star model fact tables.
-            CreateFactTablesFromStarModelInputData.createFactTables(starModelInputData);
+            CreateFactTablesFromStarModelInputData.createFactTables(starModelInputData, maxFacts);
+            logger.info("__________ sendStarModelUpdatesToDirectory: 1 starModelInputData.getFactCount(): " + starModelInputData.getFactCount());
 
             // Apply corrections to ICD 10 diagnoses, to make them compatible with
             // the Directory.
             if (correctedDiagnoses != null)
                 starModelInputData.applyDiagnosisCorrections(correctedDiagnoses);
+            logger.info("__________ sendStarModelUpdatesToDirectory: 2 starModelInputData.getFactCount(): " + starModelInputData.getFactCount());
 
             // Send fact tables to Direcory. Return some kind of results count or whatever
             List<OperationOutcome> starModelUpdateOutcome = directoryService.updateStarModel(starModelInputData);
             return starModelUpdateOutcome;
         } catch (Exception e) {
-            return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
+            return createErrorOutcome("sendStarModelUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
         }
     }
     
@@ -281,7 +292,7 @@ public class Sync {
      * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. If null, no correction will be performed.
      * @return A list of OperationOutcome objects indicating the outcome of the update operation.
      */
-    public List<OperationOutcome> sendUpdatesToDirectory(String defaultCollectionId, Map<String, String> correctedDiagnoses) {
+    public List<OperationOutcome> sendUpdatesToDirectory(String defaultCollectionId) {
         try {
             BbmriEricId defaultBbmriEricCollectionId = BbmriEricId
                 .valueOf(defaultCollectionId)
@@ -290,27 +301,34 @@ public class Sync {
             Either<OperationOutcome, List<FhirCollection>> fhirCollectionOutcomes = fhirReporting.fetchFhirCollections(defaultBbmriEricCollectionId);
             if (fhirCollectionOutcomes.isLeft())
                 return createErrorOutcome("Problem getting collections from FHIR store, " + errorMessageFromOperationOutcome(fhirCollectionOutcomes.getLeft()));
+            logger.info("__________ sendUpdatesToDirectory: FHIR collection count): " + fhirCollectionOutcomes.get().size());
 
             DirectoryCollectionPut directoryCollectionPut = FhirCollectionToDirectoryCollectionPutConverter.convert(fhirCollectionOutcomes.get());
             if (directoryCollectionPut == null) 
                 return createErrorOutcome("Problem converting FHIR attributes to Directory attributes");
+            logger.info("__________ sendUpdatesToDirectory: 1 directoryCollectionPut.getCollectionIds().size()): " + directoryCollectionPut.getCollectionIds().size());
     
             List<String> collectionIds = directoryCollectionPut.getCollectionIds();
             String countryCode = directoryCollectionPut.getCountryCode();
             Either<OperationOutcome, DirectoryCollectionGet> directoryCollectionGetOutcomes = directoryService.fetchDirectoryCollectionGetOutcomes(countryCode, collectionIds);
             if (directoryCollectionGetOutcomes.isLeft())
                 return createErrorOutcome("Problem getting collections from Directory, " + errorMessageFromOperationOutcome(directoryCollectionGetOutcomes.getLeft()));
-
             DirectoryCollectionGet directoryCollectionGet = directoryCollectionGetOutcomes.get();
+            logger.info("__________ sendUpdatesToDirectory: 1 directoryCollectionGet.getItems().size()): " + directoryCollectionGet.getItems().size());
+
             if (!MergeDirectoryCollectionGetToDirectoryCollectionPut.merge(directoryCollectionGet, directoryCollectionPut))
                 return createErrorOutcome("Problem merging Directory GET attributes to Directory PUT attributes");
+            logger.info("__________ sendUpdatesToDirectory: 2 directoryCollectionGet.getItems().size()): " + directoryCollectionGet.getItems().size());
             
             // Apply corrections to ICD 10 diagnoses, to make them compatible with
             // the Directory.
             if (correctedDiagnoses != null)
                 directoryCollectionPut.applyDiagnosisCorrections(correctedDiagnoses);
+            logger.info("__________ sendUpdatesToDirectory: 2 directoryCollectionPut.getCollectionIds().size()): " + directoryCollectionPut.getCollectionIds().size());
 
-            return directoryService.updateEntities(directoryCollectionPut);
+            List<OperationOutcome> outcomes = directoryService.updateEntities(directoryCollectionPut);
+            logger.info("__________ sendUpdatesToDirectory: 2 outcomes: " + outcomes);
+            return outcomes;
         } catch (Exception e) {
             return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
         }
