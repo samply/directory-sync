@@ -52,19 +52,18 @@ import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.INFORMATION;
  * first generate a map, mapping your local ICD 10 codes onto WHO, which are used by
  * the Directory:
  * 
- * Map<String, String> correctedDiagnoses = new HashMap<String, String>();
- * sync.generateDiagnosisCorrections(directoryDefaultCollectionId, correctedDiagnoses); // directoryDefaultCollectionId may be null
+ * sync.generateDiagnosisCorrections(directoryDefaultCollectionId); // directoryDefaultCollectionId may be null
  * 
- * Now you can start to do some synchronization.
+ * Now you can start to do some synchronization, e.g.:
  * 
- * Only send the collection sizes to the Directory:
+ * Only send the collection sizes to the Directory (deprecated):
  * sync.syncCollectionSizesToDirectory
  * 
  * Send all standard attributes to Directory:
- * sync.sendUpdatesToDirectory(directoryDefaultCollectionId, correctedDiagnoses);
+ * sync.sendUpdatesToDirectory(directoryDefaultCollectionId);
  * 
  * Send star model to Directory:
- * sync.sendStarModelUpdatesToDirectory(directoryDefaultCollectionId, correctedDiagnoses, directoryMinDonors); // e.g. directoryMinDonors=10
+ * sync.sendStarModelUpdatesToDirectory(directoryDefaultCollectionId, directoryMinDonors); // e.g. directoryMinDonors=10
  * 
  * Get biobank information from Directory and put into local FHIR store:
  * sync.updateAllBiobanksOnFhirServerIfNecessary();
@@ -79,7 +78,7 @@ public class Sync {
 
     private final FhirApi fhirApi;
     private final FhirReporting fhirReporting;
-    private final DirectoryApi directoryApi;
+    private DirectoryApi directoryApi;
     private final DirectoryService directoryService;
 
     public Sync(FhirApi fhirApi, FhirReporting fhirReporting, DirectoryApi directoryApi,
@@ -250,7 +249,9 @@ public class Sync {
             StarModelData starModelInputData = starModelInputDataOutcome.get();
             logger.info("__________ sendStarModelUpdatesToDirectory: number of collection IDs: " + starModelInputData.getInputCollectionIds().size());
 
-            // Hpercubes containing less than the minimum number of donors will not be
+            relogin();
+
+            // Hypercubes containing less than the minimum number of donors will not be
             // included in the star model output.
             starModelInputData.setMinDonors(minDonors);
 
@@ -265,8 +266,11 @@ public class Sync {
                 starModelInputData.applyDiagnosisCorrections(correctedDiagnoses);
             logger.info("__________ sendStarModelUpdatesToDirectory: 2 starModelInputData.getFactCount(): " + starModelInputData.getFactCount());
 
-            // Send fact tables to Direcory. Return some kind of results count or whatever
+            // Send fact tables to Direcory.
+            relogin();
             List<OperationOutcome> starModelUpdateOutcome = directoryService.updateStarModel(starModelInputData);
+            logger.info("__________ sendStarModelUpdatesToDirectory: star model has been updated");
+            // Return some kind of results count or whatever
             return starModelUpdateOutcome;
         } catch (Exception e) {
             return createErrorOutcome("sendStarModelUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
@@ -289,7 +293,6 @@ public class Sync {
      *  5. Push the new information back to the Directory.
      * 
      * @param defaultCollectionId The default collection ID to use for fetching collections from the FHIR store.
-     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. If null, no correction will be performed.
      * @return A list of OperationOutcome objects indicating the outcome of the update operation.
      */
     public List<OperationOutcome> sendUpdatesToDirectory(String defaultCollectionId) {
@@ -310,6 +313,7 @@ public class Sync {
     
             List<String> collectionIds = directoryCollectionPut.getCollectionIds();
             String countryCode = directoryCollectionPut.getCountryCode();
+            relogin();
             Either<OperationOutcome, DirectoryCollectionGet> directoryCollectionGetOutcomes = directoryService.fetchDirectoryCollectionGetOutcomes(countryCode, collectionIds);
             if (directoryCollectionGetOutcomes.isLeft())
                 return createErrorOutcome("Problem getting collections from Directory, " + errorMessageFromOperationOutcome(directoryCollectionGetOutcomes.getLeft()));
@@ -326,12 +330,26 @@ public class Sync {
                 directoryCollectionPut.applyDiagnosisCorrections(correctedDiagnoses);
             logger.info("__________ sendUpdatesToDirectory: 2 directoryCollectionPut.getCollectionIds().size()): " + directoryCollectionPut.getCollectionIds().size());
 
+            relogin();
             List<OperationOutcome> outcomes = directoryService.updateEntities(directoryCollectionPut);
             logger.info("__________ sendUpdatesToDirectory: 2 outcomes: " + outcomes);
             return outcomes;
         } catch (Exception e) {
             return createErrorOutcome("sendUpdatesToDirectory - unexpected error: " + Util.traceFromException(e));
         }
+    }
+
+    /**
+     * Renew the Directory login.
+     *
+     * This generates a new DirectoryApi object, which needs to be distributed to the places
+     * where it will be used.
+     *
+     * Consequence: this method has significant side effects.
+     */
+    private void relogin() {
+        directoryApi = directoryApi.relogin();
+        directoryService.setApi(directoryApi);
     }
 
     private String errorMessageFromOperationOutcome(OperationOutcome operationOutcome) {

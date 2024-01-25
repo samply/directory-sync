@@ -18,10 +18,14 @@ import org.hl7.fhir.r4.model.OperationOutcome;
 
 public class DirectoryService {
 
-  private final DirectoryApi api;
+  private DirectoryApi api;
 
   public DirectoryService(DirectoryApi api) {
     this.api = Objects.requireNonNull(api);
+  }
+
+  public void setApi(DirectoryApi api) {
+    this.api = api;
   }
 
   public List<OperationOutcome> updateCollectionSizes(Map<BbmriEricId, Integer> collectionSizes) {
