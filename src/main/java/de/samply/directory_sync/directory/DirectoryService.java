@@ -4,7 +4,8 @@ import de.samply.directory_sync.directory.DirectoryApi.CollectionSizeDto;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
 import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
-import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
+import de.samply.directory_sync.StarModelData;
+
 import io.vavr.control.Either;
 
 import java.util.Collections;
@@ -61,5 +62,15 @@ public class DirectoryService {
   
   public Either<OperationOutcome, DirectoryCollectionGet> fetchDirectoryCollectionGetOutcomes(String countryCode, List<String> collectionIds) {
     return(api.fetchCollectionGetOutcomes(countryCode, collectionIds));
+  }
+
+  public List<OperationOutcome> updateStarModel(StarModelData starModelInputData) {
+    OperationOutcome operationOutcome = api.updateStarModel(starModelInputData);
+    return Collections.singletonList(operationOutcome);
+  }
+
+  public OperationOutcome collectStarModelDiagnosisCorrections(StarModelData starModelInputData) {
+    OperationOutcome operationOutcome = api.collectStarModelDiagnosisCorrections(starModelInputData);
+    return operationOutcome;
   }
 }

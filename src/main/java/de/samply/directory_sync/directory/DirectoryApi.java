@@ -1,5 +1,6 @@
 package de.samply.directory_sync.directory;
 
+import de.samply.directory_sync.StarModelData;
 import de.samply.directory_sync.Util;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -10,6 +11,9 @@ import static org.hl7.fhir.r4.model.OperationOutcome.IssueType.NOTFOUND;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import de.samply.directory_sync.directory.DirectoryApi.CollectionSizeDto;
+import de.samply.directory_sync.directory.DirectoryApi.LoginCredentials;
+import de.samply.directory_sync.directory.DirectoryApi.LoginResponse;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
@@ -18,7 +22,11 @@ import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
 import de.samply.directory_sync.fhir.FhirReporting;
 import io.vavr.control.Either;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,6 +36,7 @@ import java.util.stream.Collectors;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
@@ -37,6 +46,8 @@ import org.apache.http.util.EntityUtils;
 import org.hl7.fhir.r4.model.OperationOutcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
+import java.net.URI;
 
 public class DirectoryApi {
   private static final Logger logger = LoggerFactory.getLogger(DirectoryApi.class);
@@ -302,11 +313,300 @@ public class DirectoryApi {
     return request;
   }
 
+  /**
+   * Updates the Star Model data in the Directory service based on the provided StarModelInputData.
+   * 
+   * Before sending any star model data to the Directory, the original
+   * star model data for all known collections will be deleted from the
+   * Directory.
+   *
+   * @param starModelInputData The input data for updating the Star Model.
+   * @return An OperationOutcome indicating the success or failure of the update.
+   */
+  public OperationOutcome updateStarModel(StarModelData starModelInputData) {
+    // Get rid of previous star models first. This is necessary, because:
+    // 1. A new star model may be decomposed into different hypercubes.
+    // 2. The new fact IDs may be different from the old ones.
+    OperationOutcome deleteOutcome = deleteStarModel(starModelInputData);
+    if (deleteOutcome.getIssue().size() > 0) {
+      logger.warn("Problem deleting star models");
+      return deleteOutcome;
+    }
+
+    // Now push the new data
+    HttpPost request = updateStarModelRequest(starModelInputData);
+
+    try (CloseableHttpResponse response = httpClient.execute(request)) {
+      if (response.getStatusLine().getStatusCode() < 300) {
+        return updateSuccessful(starModelInputData.getFactCount());
+      } else {
+        return error("entity update status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
+      }
+    } catch (IOException e) {
+      return error("entity update exception", e.getMessage());
+    }
+  }
+
+  /**
+   * Constructs an HTTP POST request for updating Star Model data based on the provided StarModelInputData.
+   *
+   * @param starModelInputData The input data for the update request.
+   * @return An HttpPost request object.
+   */
+  private HttpPost updateStarModelRequest(StarModelData starModelInputData) {
+    HttpPost request = new HttpPost(buildApiUrl(starModelInputData.getCountryCode(), "facts"));
+    // Directory likes to have its data wrapped in a map with key "entities".
+    Map<String,Object> body = new HashMap<String,Object>();
+    body.put("entities", starModelInputData.getFactTables());
+    String jsonBody = gson.toJson(body);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    request.setEntity(new StringEntity(jsonBody, UTF_8));
+    return request;
+  }
+
+  /**
+   * Deletes existing star models from the Directory service for each of the collection IDs in the supplied StarModelInputData object.
+   *
+   * @param starModelInputData The input data for deleting existing star models.
+   * @return An OperationOutcome indicating the success or failure of the deletion.
+   */
+  private OperationOutcome deleteStarModel(StarModelData starModelInputData) {
+    String apiUrl = buildApiUrl(starModelInputData.getCountryCode(), "facts");
+
+    try {
+      for (String collectionId: starModelInputData.getInputCollectionIds()) {
+        // First get a list of fact IDs for this collection
+        Map factWrapper = fetchFactWrapperByCollection(apiUrl, collectionId);
+        if (!factWrapper.containsKey("items"))
+          return error("No facts for collection", collectionId);
+        List<Map<String, String>> facts = (List<Map<String, String>>) factWrapper.get("items");
+        List<String> factIds = facts.stream()
+                            .map(map -> map.get("id"))
+                            .collect(Collectors.toList());
+
+        // Take the list of fact IDs and delete all of the corresponding facts
+        // at the Directory.
+        OperationOutcome deleteOutcome = deleteFactsByIds(apiUrl, factIds);
+        if (deleteOutcome.getIssue().size() > 0)
+          return deleteOutcome;
+      }
+    } catch(Exception e) {
+      return error("Exception during delete", Util.traceFromException(e));
+    }
+
+    return new OperationOutcome();
+  }
+
+  /**
+   * Fetches the fact wrapper object by collection from the Directory service.
+   *
+   * @param apiUrl        The base URL for the Directory API.
+   * @param collectionId  The ID of the collection for which to fetch the fact wrapper.
+   * @return A Map representing the fact wrapper retrieved from the Directory service.
+   */
+  public Map fetchFactWrapperByCollection(String apiUrl, String collectionId) {
+    Map body = null;
+    try {
+      HttpGet request = fetchFactWrapperByCollectionRequest(apiUrl, collectionId);
+
+      CloseableHttpResponse response = httpClient.execute(request);
+      if (response.getStatusLine().getStatusCode() < 300) {
+        HttpEntity httpEntity = response.getEntity();
+        String json = EntityUtils.toString(httpEntity);
+        body = gson.fromJson(json, Map.class);
+      } else
+        logger.warn("entity get HTTP error; " + Integer.toString(response.getStatusLine().getStatusCode()));
+    } catch (IOException e) {
+        logger.warn("entity get exception: " + Util.traceFromException(e));
+    } catch (Exception e) {
+        logger.warn("unknown exception: " + Util.traceFromException(e));
+    }
+
+    return body;
+  }
+
+  /**
+   * Constructs an HTTP GET request for fetching the fact wrapper object by collection from the Directory service.
+   *
+   * @param apiUrl        The base URL for the Directory API.
+   * @param collectionId  The ID of the collection for which to fetch the fact wrapper.
+   * @return An HttpGet request object.
+   */
+  private HttpGet fetchFactWrapperByCollectionRequest(String apiUrl, String collectionId) {
+    String url = apiUrl + "?q=collection=='" + collectionId + "'";
+    HttpGet request = new HttpGet(url);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    return request;
+  }
+
+  /**
+   * Deletes facts from the Directory service based on a list of fact IDs.
+   *
+   * @param apiUrl    The base URL for the Directory API.
+   * @param factIds   The list of fact IDs to be deleted.
+   * @return An OperationOutcome indicating the success or failure of the deletion.
+   */
+  public OperationOutcome deleteFactsByIds(String apiUrl, List<String> factIds) {
+    if (factIds.size() == 0)
+      // Nothing to delete
+      return new OperationOutcome();
+
+    HttpDeleteWithBody request = deleteFactsByIdsRequest(apiUrl, factIds);
+
+    try (CloseableHttpResponse response = httpClient.execute(request)) {
+      if (response.getStatusLine().getStatusCode() < 300) {
+        return new OperationOutcome();
+      } else {
+        return error("entity delete status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
+      }
+    } catch (IOException e) {
+      return error("entity delete exception", e.getMessage());
+    }
+  }
+
+  /**
+   * Constructs an HTTP DELETE request with a request body for deleting facts by IDs from the Directory service.
+   *
+   * @param apiUrl    The base URL for the Directory API.
+   * @param factIds   The list of fact IDs to be deleted.
+   * @return An HttpDeleteWithBody request object.
+   */
+  private HttpDeleteWithBody deleteFactsByIdsRequest(String apiUrl, List<String> factIds) {
+    HttpDeleteWithBody request = new HttpDeleteWithBody(apiUrl);
+    // Directory likes to have its delete data wrapped in a map with key "entityIds".
+    Map<String,Object> body = new HashMap<String,Object>();
+    body.put("entityIds", factIds);
+    String jsonBody = gson.toJson(body);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    request.setEntity(new StringEntity(jsonBody, UTF_8));
+    return request;
+  }
+
+  /**
+   * Custom HTTP DELETE request with a request body support.
+   * Used for sending delete requests with a request body to the Directory service.
+   */
+  class HttpDeleteWithBody extends HttpEntityEnclosingRequestBase {
+    public static final String METHOD_NAME = "DELETE";
+
+    public HttpDeleteWithBody() {
+        super();
+    }
+
+    public HttpDeleteWithBody(final URI uri) {
+        super();
+        setURI(uri);
+    }
+
+    public HttpDeleteWithBody(final String uri) {
+        super();
+        setURI(URI.create(uri));
+    }
+
+    @Override
+    public String getMethod() {
+        return METHOD_NAME;
+    }
+  }
+  
+  /**
+   * Collects diagnosis corrections for the StarModelInputData. These are
+   * stored in the diagnoses map.
+   * 
+   * It checks with the Directory if the diagnosis codes are valid ICD values and corrects them if necessary.
+   * 
+   * Two levels of correction are possible:
+   * 
+   * 1. If the full code is not correct, remove the number after the period and try again. If the new truncated code is OK, use it to replace the existing diagnosis.
+   * 2. If that doesn't work, replace the existing diagnosis with null.
+   *
+   * @param starModelInputData The input data containing diagnoses to be corrected.
+   * @return An OperationOutcome indicating the success or failure of the diagnosis corrections.
+   */
+  public OperationOutcome collectStarModelDiagnosisCorrections(StarModelData starModelInputData) {
+    Map<String, String> diagnoses = starModelInputData.getDiagnoses();
+    for (String diagnosis: diagnoses.keySet())
+      if (!isValidIcdValue(diagnosis)) {
+        String diagnosisCategory = diagnosis.split("\\.")[0];
+        if (isValidIcdValue(diagnosisCategory))
+          diagnoses.put(diagnosis, diagnosisCategory);
+        else
+          diagnoses.put(diagnosis, null);
+      }
+      
+    return null;
+  }
+
+  /**
+   * Checks if a given diagnosis code is a valid ICD value by querying the Directory service.
+   *
+   * @param diagnosis The diagnosis code to be validated.
+   * @return true if the diagnosis code is a valid ICD value, false if not, or if an error condition was encountered.
+   */
+  private boolean isValidIcdValue(String diagnosis) {
+    String url = baseUrl + "/api/v2/eu_bbmri_eric_disease_types?q=id=='" + diagnosis + "'";
+    try {
+      HttpGet request = isValidIcdValueRequest(url);
+      CloseableHttpResponse response = httpClient.execute(request);
+      if (response.getStatusLine().getStatusCode() < 300) {
+        HttpEntity httpEntity = response.getEntity();
+        String json = EntityUtils.toString(httpEntity);
+        Map body = gson.fromJson(json, Map.class);
+        if (body.containsKey("total")) {
+          Object total = body.get("total");
+          if (total instanceof Double) {
+            Integer intTotal = ((Double) total).intValue();
+            if (intTotal > 0)
+              return true;
+          }
+        }
+      } else
+        logger.warn("ICD validation get HTTP error; " + Integer.toString(response.getStatusLine().getStatusCode()));
+    } catch (IOException e) {
+        logger.warn("ICD validation get exception: " + Util.traceFromException(e));
+    } catch (Exception e) {
+        logger.warn("ICD validation, unknown exception: " + Util.traceFromException(e));
+    }
+
+    return false;
+  }
+
+  /**
+   * Constructs an HTTP GET request for validating an ICD value against the Directory service.
+   *
+   * @param url The URL for validating the ICD value.
+   * @return An HttpGet request object.
+   */
+  private HttpGet isValidIcdValueRequest(String url) {
+    HttpGet request = new HttpGet(url);
+    request.setHeader("x-molgenis-token", token);
+    request.setHeader("Accept", "application/json");
+    request.setHeader("Content-type", "application/json");
+    return request;
+  }
+
   private String buildCollectionApiUrl(String countryCode) {
+    return buildApiUrl(countryCode, "collections");
+  }
+
+  /**
+   * Create a URL for a specific Directory API endpoint.
+   * 
+   * @param countryCode a code such as "DE" specifying the country the URL should address. May be null.
+   * @param function specifies the type of the endpoint, e.g. "collections".
+   * @return
+   */
+  private String buildApiUrl(String countryCode, String function) {
     String countryCodeInsert = "";
     if (countryCode != null && !countryCode.isEmpty())
       countryCodeInsert = countryCode + "_";
-    String collectionApiUrl = baseUrl + "/api/v2/eu_bbmri_eric_" + countryCodeInsert + "collections";
+    String collectionApiUrl = baseUrl + "/api/v2/eu_bbmri_eric_" + countryCodeInsert + function;
 
     return collectionApiUrl;
   }
