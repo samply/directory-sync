@@ -1,52 +1,26 @@
 name: Build
 
 on:
-  schedule:
-  - cron: '0 10 * * *' # every day at 10am
   push:
     branches:
-    - master
-    - develop
+      - master
+      - develop
     tags:
-    - 'v*.*.*'
+      - '*.*.*'
   pull_request:
     branches:
-    - master
-    - develop
+      - master
+      - develop
+  schedule:
+    - cron: '0 1 * * *'
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
-
-    steps:
-    - name: Check out Git repository
-      uses: actions/checkout@v3
-
-    - name: Setup Java
-      uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: 8
-
-    - name: Cache Local Maven Repo
-      uses: actions/cache@v3
-      with:
-        path: ~/.m2/repository
-        key: maven-${{ hashFiles('pom.xml') }}
-
-    - name: Build with Maven
-      run: mvn -B package
-
-    - name: Run Trivy vulnerability scanner in repo mode
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        ignore-unfixed: true
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-        severity: 'HIGH,CRITICAL'
-
-    - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: 'trivy-results.sarif'
+    uses: samply/github-workflows/.github/workflows/maven.yml@main
+    with:
+      java-version: 8
+    secrets:
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+      OSSRH_GPG_SECRET_KEY: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
+      OSSRH_GPG_SECRET_KEY_PASSWORD: ${{ secrets.OSSRH_GPG_SECRET_KEY_PASSWORD }}

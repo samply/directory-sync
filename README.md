@@ -6,7 +6,7 @@ The Directory-sync library is designed to synchronize between a FHIR store assoc
 
 This is meant to make the lives of biobank administrators a little easier, since they must currently perform this synchronization by hand.
 
-The library can update the Direcory with the following information, on a per-collection basis:
+The library can update the Directory with the following information, on a per-collection basis:
 - number of donors/patients
 - number of samples
 - sex
