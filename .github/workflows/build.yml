@@ -18,7 +18,7 @@ jobs:
   build:
     uses: samply/github-workflows/.github/workflows/maven.yml@main
     with:
-      java-version: 8
+      java-version: 11
     secrets:
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
