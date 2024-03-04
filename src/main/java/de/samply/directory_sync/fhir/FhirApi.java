@@ -6,7 +6,9 @@ import static java.util.Collections.emptyList;
 import static org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity.ERROR;
 
 import ca.uhn.fhir.rest.api.MethodOutcome;
+import ca.uhn.fhir.rest.api.SummaryEnum;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
+import ca.uhn.fhir.rest.client.exceptions.FhirClientConnectionException;
 import ca.uhn.fhir.rest.gclient.ICreateTyped;
 import ca.uhn.fhir.rest.gclient.IQuery;
 import ca.uhn.fhir.rest.gclient.IUpdateExecutable;
@@ -23,12 +25,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.function.Predicate;
 import java.util.function.Function;
 import java.util.HashSet;
 
+import org.hl7.fhir.instance.model.api.IBaseBundle;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r4.model.Bundle;
@@ -48,6 +52,7 @@ import org.hl7.fhir.r4.model.ResourceType;
 import org.hl7.fhir.r4.model.Specimen;
 import org.hl7.fhir.r4.model.StringType;
 import org.hl7.fhir.r4.model.Reference;
+import org.hl7.fhir.r4.model.Resource;
 import org.hl7.fhir.r4.model.Condition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +69,9 @@ public class FhirApi {
 
   private static final Logger logger = LoggerFactory.getLogger(FhirApi.class);
 
+  Map<String, List<Specimen>> specimensByCollection = null;
+  Map<String, List<Patient>> patientsByCollection = null;
+  
   /**
    * Returns the BBMRI-ERIC identifier of {@code collection} if some valid one could be found.
    *
@@ -246,32 +254,89 @@ public class FhirApi {
    * @throws Exception if the FHIR server request fails or the response is invalid
    */
   public Either<OperationOutcome, Map<String,List<Specimen>>> fetchSpecimensByCollection(BbmriEricId defaultBbmriEricCollectionId) {
-    try {
-      Bundle response = (Bundle) fhirClient.search().forResource(Specimen.class).execute();
+    logger.info("__________ fetchSpecimensByCollection: entered");
 
-      Map<String,List<Specimen>> specimensByCollection = response.getEntry().stream()
-              .map(e -> (Specimen) e.getResource())
-              .collect(Collectors.groupingBy(s -> extractCollectionIdFromSpecimen(s)));
+    // This method is slow, so use cached value if available.
+    if (specimensByCollection != null)
+      return Either.right(specimensByCollection);
+
+    logger.info("__________ fetchSpecimensByCollection: get specimens from FHIR store");
+
+    try {
+      specimensByCollection = getAllSpecimensAsMap();
+
+      logger.info("__________ fetchSpecimensByCollection: specimensByCollection size: " + specimensByCollection.size());
 
       defaultBbmriEricCollectionId = determineDefaultCollectionId(defaultBbmriEricCollectionId, specimensByCollection);
+
+      logger.info("__________ fetchSpecimensByCollection: defaultBbmriEricCollectionId: " + defaultBbmriEricCollectionId.toString());
 
       // Remove specimens without a collection from specimensByCollection, but keep
       // the relevant specimen list, just in case we have a valid default ID to
       // associate with them.
       List<Specimen> defaultCollection = specimensByCollection.remove(DEFAULT_COLLECTION_ID);
 
+      if (defaultCollection == null)
+        logger.info("__________ fetchSpecimensByCollection: defaultCollection is null");
+      else
+        logger.info("__________ fetchSpecimensByCollection: defaultCollection size: " + defaultCollection.size());
+
       // Replace the DEFAULT_COLLECTION_ID key in specimensByCollection by a sensible collection ID,
       // assuming, of course, that there were any specemins caregorized by DEFAULT_COLLECTION_ID.
       if (defaultCollection != null && defaultCollection.size() != 0 && defaultBbmriEricCollectionId != null) {
+        logger.info("__________ fetchSpecimensByCollection: Replace the DEFAULT_COLLECTION_ID key");
+
         specimensByCollection.put(defaultBbmriEricCollectionId.toString(), defaultCollection);
       }
+
+      logger.info("__________ fetchSpecimensByCollection: specimensByCollection size: " + specimensByCollection.size());
 
       return Either.right(specimensByCollection);
     } catch (Exception e) {
       OperationOutcome outcome = new OperationOutcome();
-      outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics(e.getMessage());
+      outcome.addIssue().setSeverity(OperationOutcome.IssueSeverity.ERROR).setDiagnostics(Util.traceFromException(e));
       return Either.left(outcome);
     }
+  }
+
+  /**
+   * Retrieves all Specimens from the FHIR server and organizes them into a Map based on their Collection ID.
+   *
+   * @return A Map where keys are Collection IDs and values are Lists of Specimens associated with each Collection ID.
+   * @throws FhirClientConnectionException If there is an issue connecting to the FHIR server.
+   * @throws FhirClientInitializationException If the FHIR client fails to initialize.
+   * @throws FhirSearchException If there is an issue executing the search query on the FHIR server.
+   */
+  private Map<String, List<Specimen>> getAllSpecimensAsMap() {
+    Map<String, List<Specimen>> result = new HashMap<String, List<Specimen>>();
+
+    // Use ITransactionTyped instead of returnBundle(Bundle.class)
+    IQuery<IBaseBundle> bundleTransaction = fhirClient.search().forResource(Specimen.class);
+    Bundle bundle = (Bundle) bundleTransaction.execute();
+
+    // Keep looping until the store has no more specimens.
+    // This gets around the page size limit of 50 that is imposed by the current implementation of Blaze.
+    do {
+        // Add entries to the result map
+        for (Bundle.BundleEntryComponent entry : bundle.getEntry()) {
+            Specimen specimen = (Specimen) entry.getResource();
+            String collectionId = extractCollectionIdFromSpecimen(specimen);
+            if (!result.containsKey(collectionId))
+                result.put(collectionId, new ArrayList<>());
+            result.get(collectionId).add(specimen);
+        }
+
+        logger.info("__________ getAllSpecimensAsMap: Added " + bundle.getEntry().size() + " entries to result, result size: " + result.size());
+
+        // Check if there are more pages
+        if (bundle.getLink(Bundle.LINK_NEXT) != null)
+            // Use ITransactionTyped to load the next page
+            bundle = fhirClient.loadPage().next(bundle).execute();
+        else
+            bundle = null;
+    } while (bundle != null);
+
+    return result;
   }
 
   /**
@@ -283,7 +348,11 @@ public class FhirApi {
    * @return
    */
   Either<OperationOutcome, Map<String,List<Patient>>> fetchPatientsByCollection(Map<String,List<Specimen>> specimensByCollection) {
-    Map<String,List<Patient>> patientsByCollection = specimensByCollection.entrySet().stream()
+    // This method is slow, so use cached value if available.
+    if (patientsByCollection != null)
+      return Either.right(patientsByCollection);
+
+    patientsByCollection = specimensByCollection.entrySet().stream()
               .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), extractPatientListFromSpecimenList(entry.getValue())))
               .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)) ;
 
@@ -342,6 +411,8 @@ public class FhirApi {
               .execute();
   }
 
+  Boolean conditionsPresentInFhirStore = null;
+
   /**
    * Extracts a list of condition codes from a Patient resource using a FHIR client.
    * The condition codes are based on the system "http://hl7.org/fhir/sid/icd-10".
@@ -351,6 +422,21 @@ public class FhirApi {
   public List<String> extractConditionCodesFromPatient(Patient patient) {
     List<String> conditionCodes = new ArrayList<String>();
     try {
+      // If there are no conditions in the FHIR store, then we don't
+      // need to bother checking the patient for conditions.
+      if (conditionsPresentInFhirStore == null) {
+        int conditionCount = fhirClient
+          .search()
+          .forResource(Condition.class)
+          .returnBundle(Bundle.class)
+          .summaryMode(SummaryEnum.COUNT)
+          .execute()
+          .getTotal();
+        conditionsPresentInFhirStore = conditionCount > 0;
+      }
+      if (!conditionsPresentInFhirStore)
+        return conditionCodes;
+
       // Search for Condition resources by patient ID
       Bundle bundle = fhirClient
         .search()
@@ -486,8 +572,6 @@ public class FhirApi {
    * @param specimen a Specimen resource that may have extension elements
    * @param url the URL of the extension element to extract
    * @return a list of strings that contains the code value of each extension element with the given URL, or an empty list if none is found
-   * @see Extension[^2^][2]
-   * @see CodeableConcept[^3^][3]
    */
   public List<String> extractExtensionElementValuesFromSpecimen(Specimen specimen, String url) {
     List<Extension> extensions = specimen.getExtensionsByUrl(url);

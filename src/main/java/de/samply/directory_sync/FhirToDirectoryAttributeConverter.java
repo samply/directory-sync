@@ -62,6 +62,7 @@ public class FhirToDirectoryAttributeConverter {
                 .replaceAll("^CSF_LIQUOR$", "OTHER")
                 .replaceAll("^LIQUID$", "OTHER")
                 .replaceAll("^ASCITES$", "OTHER")
+                .replaceAll("^BONE_MARROW$", "OTHER")
                 .replaceAll("^TISSUE_PAXGENE_OR_ELSE$", "OTHER")
                 ;
     

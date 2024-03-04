@@ -27,15 +27,17 @@ public class CreateFactTablesFromStarModelInputData {
      * Fact tables are generated based on input rows and specified criteria such as minimum donors.
      *
      * @param starModelInputData The Star Model input data containing information for fact table creation.
+     * @param maxFacts
      *
      * @throws NullPointerException if starModelInputData is null.
      */
-    public static void createFactTables(StarModelData starModelInputData) {
+    public static void createFactTables(StarModelData starModelInputData, int maxFacts) {
         for (String collectionId: starModelInputData.getInputCollectionIds()) {
-        List<Map<String, String>> factTableFinal = createFactTableFinal(collectionId,
-            starModelInputData.getMinDonors(),
-            starModelInputData.getInputRowsAsStringMaps(collectionId));
-        starModelInputData.addFactTable(collectionId, factTableFinal);
+            List<Map<String, String>> factTableFinal = createFactTableFinal(collectionId,
+                starModelInputData.getMinDonors(),
+                maxFacts,
+                starModelInputData.getInputRowsAsStringMaps(collectionId));
+            starModelInputData.addFactTable(collectionId, factTableFinal);
         }
     }
 
@@ -46,10 +48,11 @@ public class CreateFactTablesFromStarModelInputData {
      * 
      * @param collectionId The identifier for the collection for which to create the fact table.
      * @param minDonors The minimum number of donors required for a fact to be included in the table.
+     * @param maxFacts
      * @param patientSamples The list of input rows representing patient samples for the collection.
      * @return The final fact table as a list of maps containing key-value pairs.
      */
-    private static List<Map<String, String>> createFactTableFinal(String collectionId, int minDonors, List<Map<String, String>> patientSamples) {
+    private static List<Map<String, String>> createFactTableFinal(String collectionId, int minDonors, int maxFacts, List<Map<String, String>> patientSamples) {
         // Select columns and create a new column "age_range"
         List<Map<String, String>> patientSamplesFacts = patientSamples.stream()
             .map(result -> {
@@ -80,7 +83,12 @@ public class CreateFactTablesFromStarModelInputData {
 
         // Perform additional data transformations on the facts table
         List<Map<String, String>> factTableFinal = new ArrayList<>();
+        int factTableSize = 0;
         for (Map.Entry<String, Long> entry : factTable.entrySet()) {
+            if (maxFacts >= 0 && factTableSize >= maxFacts)
+                break;
+            factTableSize++;
+
             List<String> keyParts = Arrays.asList(entry.getKey().split("_"));
 
             String sampleMaterial = keyParts.get(3);

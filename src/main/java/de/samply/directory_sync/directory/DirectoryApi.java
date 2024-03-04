@@ -56,6 +56,8 @@ public class DirectoryApi {
   private final String baseUrl;
   private final String token;
   private final Gson gson = new Gson();
+  private String username;
+  private String password;
 
   private DirectoryApi(CloseableHttpClient httpClient, String baseUrl, String token) {
     this.httpClient = Objects.requireNonNull(httpClient);
@@ -67,7 +69,7 @@ public class DirectoryApi {
       CloseableHttpClient httpClient,
       String baseUrl, String username, String password) {
     return login(httpClient, baseUrl.replaceFirst("/*$", ""), username, password)
-        .map(response -> createWithToken(httpClient, baseUrl, response.token));
+        .map(response -> createWithToken(httpClient, baseUrl, response.token).setUsernameAndPassword(username, password));
   }
 
   private static Either<OperationOutcome, LoginResponse> login(CloseableHttpClient httpClient,
@@ -79,6 +81,48 @@ public class DirectoryApi {
     } catch (IOException e) {
       return Either.left(error("login", e.getMessage()));
     }
+  }
+
+  /**
+   * Store username and password internally, to allow relogin where necessary.
+   *
+   * @param username
+   * @param password
+   * @return
+   */
+  private DirectoryApi setUsernameAndPassword(String username, String password) {
+    this.username = username;
+    this.password = password;
+
+    return this;
+  }
+
+  /**
+   * Log back in to the Directory. This is typically used in situations where there has
+   * been a long pause since the last API call to the Directory. It returns a fresh
+   * DirectoryApi object, which you should use to replace the existing one.
+   *
+   * Returns null if something goes wrong.
+   *
+   * @return new DirectoryApi object.
+   */
+  public DirectoryApi relogin() {
+    logger.info("relogin: logging back in");
+    HttpPost request = loginRequest(baseUrl, username, password);
+    String token = null;
+    try (CloseableHttpResponse response = httpClient.execute(request)) {
+      LoginResponse loginResponse = decodeLoginResponse(response);
+      token = loginResponse.token;
+      if (token == null) {
+        logger.warn("relogin: got a null token back from the Directory, returning null.");
+        return null;
+      }
+    } catch (IOException e) {
+      logger.warn("relogin: exception: " + Util.traceFromException(e));
+      return null;
+    }
+
+    return new DirectoryApi(httpClient, baseUrl.replaceFirst("/*$", ""), token).setUsernameAndPassword(username, password);
   }
 
   private static HttpPost loginRequest(String baseUrl, String username, String password) {
@@ -203,7 +247,7 @@ public class DirectoryApi {
   /**
    * Make a call to the Directory to get all Collection IDs for the supplied {@code countryCode}.
    *
-   * @param countryCode the country code of the endpoint of the national node, e.g. Germany
+   * @param countryCode the country code of the endpoint of the national node, e.g. DE
    * @return all the Collections for the national node. E.g. "DE" will return all German collections
    */
   public Either<OperationOutcome, Set<BbmriEricId>> listAllCollectionIds(String countryCode) {
@@ -231,12 +275,12 @@ public class DirectoryApi {
   }
 
   /**
-   * Make API calls to the Directory to get a DirectoryCollectionGet object containing attributes
+   * Make API calls to the Directory to fill a DirectoryCollectionGet object containing attributes
    * for all of the collections listed in collectionIds. The countryCode is used solely for
    * constructing the URL for the API call.
    * 
-   * @param countryCode
-   * @param collectionIds
+   * @param countryCode E.g. "DE".
+   * @param collectionIds IDs of the collections whose data will be harvested.
    * @return
    */
   public Either<OperationOutcome, DirectoryCollectionGet> fetchCollectionGetOutcomes(String countryCode, List<String> collectionIds) {
@@ -253,14 +297,14 @@ public class DirectoryApi {
           DirectoryCollectionGet singleDirectoryCollectionGet = gson.fromJson(json, DirectoryCollectionGet.class);
           Map item = singleDirectoryCollectionGet.getItemZero(); // assume that only one collection matches collectionId
           if (item == null)
-            	return Either.left(error("entity get item is null, does the collection exist in the Directory: ", collectionId));
+            	return Either.left(error("fetchCollectionGetOutcomes: entity get item is null, does the collection exist in the Directory: ", collectionId));
           directoryCollectionGet.getItems().add(item);
         } else
-          return Either.left(error("entity get HTTP error", Integer.toString(response.getStatusLine().getStatusCode())));
+          return Either.left(error("fetchCollectionGetOutcomes: entity get HTTP error", Integer.toString(response.getStatusLine().getStatusCode())));
       } catch (IOException e) {
-          return Either.left(error("entity get exception", Util.traceFromException(e)));
+          return Either.left(error("fetchCollectionGetOutcomes: entity get exception", Util.traceFromException(e)));
       } catch (Exception e) {
-          return Either.left(error("unknown exception", Util.traceFromException(e)));
+          return Either.left(error("fetchCollectionGetOutcomes: unknown exception", Util.traceFromException(e)));
       }
     }
 
@@ -269,6 +313,8 @@ public class DirectoryApi {
 
   private HttpGet fetchCollectionsRequest(String countryCode, String collectionId) {
     String url = buildCollectionApiUrl(countryCode) + "?q=id==%22" + collectionId  + "%22";
+
+    logger.info("DirectoryApi.fetchCollectionsRequest: url=" + url);
 
     HttpGet request = new HttpGet(url);
     request.setHeader("x-molgenis-token", token);
@@ -281,13 +327,9 @@ public class DirectoryApi {
   }
 
   /**
-   * Send the collection entities to the Directory.
-   * <p>
-   * You need 'update data' permission on entity type
-   * 'Collections' at the Directory in order for this to work.
+   * Send aggregated collection information to the Directory.
    *
-   * @param countryCode
-   * @param entities    the individual entities.
+   * @param directoryCollectionPut Summary information about one or more collections
    * @return an outcome, either successful or an error
    */
   public OperationOutcome updateEntities(DirectoryCollectionPut directoryCollectionPut) {
@@ -327,37 +369,49 @@ public class DirectoryApi {
     // Get rid of previous star models first. This is necessary, because:
     // 1. A new star model may be decomposed into different hypercubes.
     // 2. The new fact IDs may be different from the old ones.
+    // 3. We will be using a POST and it will return an error if we try
+    //    to overwrite an existing fact.
     OperationOutcome deleteOutcome = deleteStarModel(starModelInputData);
     if (deleteOutcome.getIssue().size() > 0) {
-      logger.warn("Problem deleting star models");
+      logger.warn("updateStarModel: Problem deleting star models");
       return deleteOutcome;
     }
 
-    // Now push the new data
-    HttpPost request = updateStarModelRequest(starModelInputData);
+    String countryCode = starModelInputData.getCountryCode();
+    List<Map<String, String>> factTables = starModelInputData.getFactTables();
+    int blockSize = 1000;
 
-    try (CloseableHttpResponse response = httpClient.execute(request)) {
-      if (response.getStatusLine().getStatusCode() < 300) {
-        return updateSuccessful(starModelInputData.getFactCount());
-      } else {
-        return error("entity update status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
+    // Break the fact table into blocks of 1000 before sending to the Directory.
+    // This is the maximum number of facts allowed per Directory API call.
+    for (int i = 0; i < factTables.size(); i += blockSize) {
+      List<Map<String, String>> factTablesBlock = factTables.subList(i, Math.min(i + blockSize, factTables.size()));
+
+      // Now push the new data
+      HttpPost request = updateStarModelRequestBlock(countryCode, factTablesBlock);
+
+      try (CloseableHttpResponse response = httpClient.execute(request)) {
+        if (response.getStatusLine().getStatusCode() >= 300)
+          return error("entity update status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
+      } catch (IOException e) {
+        return error("entity update exception", e.getMessage());
       }
-    } catch (IOException e) {
-      return error("entity update exception", e.getMessage());
     }
+
+    return updateSuccessful(starModelInputData.getFactCount());
   }
 
   /**
    * Constructs an HTTP POST request for updating Star Model data based on the provided StarModelInputData.
    *
-   * @param starModelInputData The input data for the update request.
+   * @param countryCode
+   * @param factTablesBlock
    * @return An HttpPost request object.
    */
-  private HttpPost updateStarModelRequest(StarModelData starModelInputData) {
-    HttpPost request = new HttpPost(buildApiUrl(starModelInputData.getCountryCode(), "facts"));
+  private HttpPost updateStarModelRequestBlock(String countryCode, List<Map<String, String>> factTablesBlock) {
+    HttpPost request = new HttpPost(buildApiUrl(countryCode, "facts"));
     // Directory likes to have its data wrapped in a map with key "entities".
     Map<String,Object> body = new HashMap<String,Object>();
-    body.put("entities", starModelInputData.getFactTables());
+    body.put("entities", factTablesBlock);
     String jsonBody = gson.toJson(body);
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
@@ -377,23 +431,33 @@ public class DirectoryApi {
 
     try {
       for (String collectionId: starModelInputData.getInputCollectionIds()) {
-        // First get a list of fact IDs for this collection
-        Map factWrapper = fetchFactWrapperByCollection(apiUrl, collectionId);
-        if (!factWrapper.containsKey("items"))
-          return error("No facts for collection", collectionId);
-        List<Map<String, String>> facts = (List<Map<String, String>>) factWrapper.get("items");
-        List<String> factIds = facts.stream()
-                            .map(map -> map.get("id"))
-                            .collect(Collectors.toList());
+        List<String> factIds;
+        // Loop until no more facts are left in the Directory.
+        // We need to do things this way, because the Directory implements paging
+        // and a single pass may not get all facts.
+        do {
+          // First get a list of fact IDs for this collection
+          Map factWrapper = fetchFactWrapperByCollection(apiUrl, collectionId);
+          if (factWrapper == null)
+            return error("deleteStarModel: Problem getting facts for collection, factWrapper == null, collectionId=", collectionId);
+          if (!factWrapper.containsKey("items"))
+            return error("deleteStarModel: Problem getting facts for collection, no item key present: ", collectionId);
+          List<Map<String, String>> facts = (List<Map<String, String>>) factWrapper.get("items");
+          if (facts.size() == 0)
+            break;
+          factIds = facts.stream()
+            .map(map -> map.get("id"))
+            .collect(Collectors.toList());
 
-        // Take the list of fact IDs and delete all of the corresponding facts
-        // at the Directory.
-        OperationOutcome deleteOutcome = deleteFactsByIds(apiUrl, factIds);
-        if (deleteOutcome.getIssue().size() > 0)
-          return deleteOutcome;
+          // Take the list of fact IDs and delete all of the corresponding facts
+          // at the Directory.
+          OperationOutcome deleteOutcome = deleteFactsByIds(apiUrl, factIds);
+          if (deleteOutcome.getIssue().size() > 0)
+            return deleteOutcome;
+        } while (true);
       }
     } catch(Exception e) {
-      return error("Exception during delete", Util.traceFromException(e));
+      return error("deleteStarModel: Exception during delete", Util.traceFromException(e));
     }
 
     return new OperationOutcome();
@@ -417,11 +481,11 @@ public class DirectoryApi {
         String json = EntityUtils.toString(httpEntity);
         body = gson.fromJson(json, Map.class);
       } else
-        logger.warn("entity get HTTP error; " + Integer.toString(response.getStatusLine().getStatusCode()));
+        logger.warn("fetchFactWrapperByCollection: entity get HTTP error: " + Integer.toString(response.getStatusLine().getStatusCode()) + ", apiUrl=" + apiUrl + ", collectionId=" + collectionId);
     } catch (IOException e) {
-        logger.warn("entity get exception: " + Util.traceFromException(e));
+      logger.warn("fetchFactWrapperByCollection: entity get exception: " + Util.traceFromException(e));
     } catch (Exception e) {
-        logger.warn("unknown exception: " + Util.traceFromException(e));
+      logger.warn("fetchFactWrapperByCollection: unknown exception: " + Util.traceFromException(e));
     }
 
     return body;
@@ -435,12 +499,36 @@ public class DirectoryApi {
    * @return An HttpGet request object.
    */
   private HttpGet fetchFactWrapperByCollectionRequest(String apiUrl, String collectionId) {
-    String url = apiUrl + "?q=collection=='" + collectionId + "'";
+    String url = apiUrl + "?q=collection==%22" + collectionId + "%22";
+    logger.info("fetchFactWrapperByCollectionRequest: url=" + url);
     HttpGet request = new HttpGet(url);
     request.setHeader("x-molgenis-token", token);
     request.setHeader("Accept", "application/json");
     request.setHeader("Content-type", "application/json");
     return request;
+  }
+
+  public void runTestQuery() {
+    try {
+      String url = "https://bbmritestnn.gcc.rug.nl/api/v2/eu_bbmri_eric_DE_collections?q=id==%22bbmri-eric:ID:DE_DKFZ_TEST:collection:Test1%22";
+      logger.info("runTestQuery: url=" + url);
+      HttpGet request = new HttpGet(url);
+      request.setHeader("x-molgenis-token", token);
+      request.setHeader("Accept", "application/json");
+      request.setHeader("Content-type", "application/json");
+
+      CloseableHttpResponse response = httpClient.execute(request);
+      if (response.getStatusLine().getStatusCode() < 300) {
+        HttpEntity httpEntity = response.getEntity();
+        String json = EntityUtils.toString(httpEntity);
+        logger.info("runTestQuery: SUCCESS, json=" + json);
+      } else
+        logger.warn("runTestQuery: FAILURE, entity get HTTP error: " + Integer.toString(response.getStatusLine().getStatusCode()));
+    } catch (IOException e) {
+      logger.warn("runTestQuery: FAILURE, entity get exception: " + Util.traceFromException(e));
+    } catch (Exception e) {
+      logger.warn("runTestQuery: FAILURE, unknown exception: " + Util.traceFromException(e));
+    }
   }
 
   /**
@@ -516,8 +604,7 @@ public class DirectoryApi {
   }
   
   /**
-   * Collects diagnosis corrections for the StarModelInputData. These are
-   * stored in the diagnoses map.
+   * Collects diagnosis corrections from the Directory.
    * 
    * It checks with the Directory if the diagnosis codes are valid ICD values and corrects them if necessary.
    * 
@@ -526,12 +613,13 @@ public class DirectoryApi {
    * 1. If the full code is not correct, remove the number after the period and try again. If the new truncated code is OK, use it to replace the existing diagnosis.
    * 2. If that doesn't work, replace the existing diagnosis with null.
    *
-   * @param starModelInputData The input data containing diagnoses to be corrected.
-   * @return An OperationOutcome indicating the success or failure of the diagnosis corrections.
+   * @param diagnoses A string map containing diagnoses to be corrected.
    */
-  public OperationOutcome collectStarModelDiagnosisCorrections(StarModelData starModelInputData) {
-    Map<String, String> diagnoses = starModelInputData.getDiagnoses();
-    for (String diagnosis: diagnoses.keySet())
+  public void collectDiagnosisCorrections(Map<String, String> diagnoses) {
+    int diagnosisCounter = 0; // for diagnostics only
+    for (String diagnosis: diagnoses.keySet()) {
+      if (diagnosisCounter%1000 == 0)
+        logger.info("__________ collectDiagnosisCorrections: diagnosisCounter: " + diagnosisCounter + ", total diagnoses: " + diagnoses.size());
       if (!isValidIcdValue(diagnosis)) {
         String diagnosisCategory = diagnosis.split("\\.")[0];
         if (isValidIcdValue(diagnosisCategory))
@@ -539,8 +627,8 @@ public class DirectoryApi {
         else
           diagnoses.put(diagnosis, null);
       }
-      
-    return null;
+      diagnosisCounter++;
+    }
   }
 
   /**

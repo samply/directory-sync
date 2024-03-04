@@ -6,7 +6,20 @@ The Directory-sync library is designed to synchronize between a FHIR store assoc
 
 This is meant to make the lives of biobank administrators a little easier, since they must currently perform this synchronization by hand.
 
-At the time of writing (10.12.2021), only the sample counts per collection are sent to the Directory. Only Biobank name and responsible people are retrieved from the Directory. In order to make this library really useful to biobank administrators, it would be good if lists of ICD 10 codes used in the collections could also be pushed to the Directory, but this functionality does not yet exist.
+The library can update the Direcory with the following information, on a per-collection basis:
+- number of donors/patients
+- number of samples
+- sex
+- diagnosis
+- age range
+- sample types
+- storage temperatures
+
+It is also possible to send data in the star model format. This aggregates the data into hypercubes.
+
+Data relating to biobank contact details can be retrieved from the Directory and stored in the FHIR store.
+
+The Sync class is the main entrypoint into this library. See the Javadoc in Sync.java for more details.
 
 The library was written to be used from within the (Connector)[https://github.com/samply/share-client]. However, it could be used from within any component that needs Directory-sync functionality.
 
