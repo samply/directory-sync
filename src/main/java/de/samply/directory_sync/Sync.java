@@ -177,7 +177,6 @@ public class Sync {
      * * Collects corrected diagnosis codes from the Directory API based on the MIRIAM-compatible codes.
      *
      * @param defaultCollectionId Default collection ID. May be null.
-     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. You should supply an empty map.
      * @return A list containing a single OperationOutcome indicating the success of the diagnosis corrections process.
      *         If any errors occur during the process, an OperationOutcome with error details is returned.
      */
@@ -227,7 +226,6 @@ public class Sync {
      * </p>
      *
      * @param defaultCollectionId The default BBMRI-ERIC collection ID for fetching data from the FHIR store.
-     * @param correctedDiagnoses Maps FHIR diagnosis codes onto Directory codes. If null, no correction will be performed.
      * @param minDonors The minimum number of donors required for a fact to be included in the star model output.
      * @param maxFacts The maximum number of facts to be included in the star model output. Negative number means no limit.
      * @return A list of OperationOutcome objects indicating the outcome of the star model updates.

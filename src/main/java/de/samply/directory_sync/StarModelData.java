@@ -57,7 +57,7 @@ public class StarModelData {
 
     /**
      * Represents an input row of the inputData table, with attributes commonly associated with medical data.
-     * Extends the HashMap<String, String> class to provide a key-value mapping for attributes.
+     * Extends the HashMap class to provide a key-value mapping for attributes.
      * 
      * The attributes include collection, sample material, patient ID, sex, histological location,
      * and age at primary diagnosis.

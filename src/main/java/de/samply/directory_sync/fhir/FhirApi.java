@@ -249,9 +249,8 @@ public class FhirApi {
    * If no default collection id is provided, tries to find one from the available collections.
    * If the default collection id is invalid or not found, removes the specimens without a collection id from the result.
    *
-   * @param defaultCollectionId the default collection id supplied by the site, to be used for specimens without a collection id. May be null
+   * @param defaultBbmriEricCollectionId the default collection id supplied by the site, to be used for specimens without a collection id. May be null
    * @return an Either object containing either a map of collection id to list of specimens, or an OperationOutcome object in case of an error
-   * @throws Exception if the FHIR server request fails or the response is invalid
    */
   public Either<OperationOutcome, Map<String,List<Specimen>>> fetchSpecimensByCollection(BbmriEricId defaultBbmriEricCollectionId) {
     logger.info("__________ fetchSpecimensByCollection: entered");
@@ -594,8 +593,6 @@ public class FhirApi {
    * @param specimens a list of Specimen resources that may have extension elements
    * @param url the URL of the extension elements to extract
    * @return a list of strings that contains the distinct code values of the extension elements with the given URL, or an empty list if none are found
-   * @see Extension[^2^][2]
-   * @see CodeableConcept[^3^][3]
    */
   public List<String> extractExtensionElementValuesFromSpecimens(List<Specimen> specimens, String url) {
     return specimens.stream()
