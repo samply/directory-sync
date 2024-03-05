@@ -170,7 +170,7 @@ public class DirectoryCollectionPut extends HashMap {
 
     /**
      * Represents an entity with attributes related to a collection.
-     * This class extends HashMap<String, Object> to store key-value pairs.
+     * This class extends HashMap to store key-value pairs.
      */
     public class Entity extends HashMap<String, Object> {
         /**
