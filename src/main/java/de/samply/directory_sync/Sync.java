@@ -106,6 +106,7 @@ public class Sync {
      * @return An {@link Either} containing either a success message or an error message.
      */
     public Either<String, Void> initResources() {
+        logger.info("initResources: Initializes necessary resources for the synchronization process");
         return fhirReporting.initLibrary().flatMap(_void -> fhirReporting.initMeasure());
     }
 

@@ -110,6 +110,7 @@ public class FhirReporting {
    * @return either an error or nothing
    */
   public Either<String, Void> initLibrary() {
+    logger.info("initLibrary: entered");
     return fhirApi.resourceExists(Library.class, LIBRARY_URI)
         .flatMap(exists -> exists
             ? Either.right(null)

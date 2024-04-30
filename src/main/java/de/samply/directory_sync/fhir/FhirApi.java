@@ -174,7 +174,7 @@ public class FhirApi {
    * @return a Right with {@code true} if the resource exists or a Left in case of an error
    */
   public Either<String, Boolean> resourceExists(Class<? extends IBaseResource> type, String uri) {
-    logger.info("Check whether {} with canonical URI {} exists.", type.getSimpleName(), uri);
+    logger.info("Check whether " + type + " with canonical URI " + uri + " exists.");
     try {
       return Either.right(resourceQuery(type, uri).execute().getTotal() == 1);
     } catch (Exception e) {
@@ -184,6 +184,7 @@ public class FhirApi {
   }
 
   private IQuery<Bundle> resourceQuery(Class<? extends IBaseResource> type, String uri) {
+    logger.info("resourceQuery: uri: " + uri);
     return fhirClient.search().forResource(type)
         .where(new UriClientParam("url").matches().value(uri))
         .summaryMode(COUNT)
