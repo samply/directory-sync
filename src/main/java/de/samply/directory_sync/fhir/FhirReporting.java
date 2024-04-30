@@ -120,6 +120,7 @@ public class FhirReporting {
   }
 
   public Either<String, Void> initMeasure() {
+    logger.info("initMeasure: entered");
     return fhirApi.resourceExists(Measure.class, MEASURE_URI)
         .flatMap(exists -> exists
             ? Either.right(null)
@@ -129,6 +130,7 @@ public class FhirReporting {
   }
 
   private static Either<String, String> slurp(String name) {
+    logger.info("slurp: file name: " + name);
     try (InputStream in = FhirApi.class.getResourceAsStream(name)) {
       if (in == null) {
         logger.error("file `{}` not found in classpath", name);
@@ -144,7 +146,9 @@ public class FhirReporting {
   }
 
   private <T extends IBaseResource> Either<String, T> parseResource(Class<T> type, String s) {
+    logger.info("parseResource: s: " + s);
     IParser parser = fhirContext.newJsonParser();
+    logger.info("parseResource: try parsing it");
     try {
       return Either.right(type.cast(parser.parseResource(s)));
     } catch (Exception e) {
@@ -209,7 +213,7 @@ public class FhirReporting {
     // from each group, and put this information into FhirCollection objects.
     Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollectionOutcome = fhirApi.fetchSpecimensByCollection(defaultBbmriEricCollectionId);
     if (specimensByCollectionOutcome.isLeft())
-      return Either.left(createOutcomeWithError("Problem finding specimens"));
+      return Either.left(createOutcomeWithError("fetchFhirCollections: Problem finding specimens"));
     updateFhirCollectionsWithSpecimenData(fhirCollectionMap, specimensByCollectionOutcome.get());
 
     // Group patients according to collection, extract aggregated information
@@ -268,10 +272,11 @@ public class FhirReporting {
    *         Otherwise, a List of unique diagnoses is returned.
    */
   public Either<OperationOutcome, List<String>> fetchDiagnoses(BbmriEricId defaultBbmriEricCollectionId) {
+    logger.info("fetchDiagnoses: defaultBbmriEricCollectionId: " + defaultBbmriEricCollectionId);
     // Group specimens according to collection.
     Either<OperationOutcome, Map<String, List<Specimen>>> specimensByCollectionOutcome = fhirApi.fetchSpecimensByCollection(defaultBbmriEricCollectionId);
     if (specimensByCollectionOutcome.isLeft())
-      return Either.left(createOutcomeWithError("Problem finding specimens"));
+      return Either.left(createOutcomeWithError("fetchDiagnoses: Problem finding specimens"));
     Map<String, List<Specimen>> specimensByCollection = specimensByCollectionOutcome.get();
 
     // Get diagnoses from Specimen extensions

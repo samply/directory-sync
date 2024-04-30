@@ -105,6 +105,7 @@ public class FhirApi {
   }
 
   public Either<String, Void> createResource(IBaseResource resource) {
+    logger.info("createResource: entered");
     try {
       MethodOutcome outcome = resourceCreate(resource).execute();
       if (outcome.getCreated()) {
@@ -118,6 +119,7 @@ public class FhirApi {
   }
 
   private ICreateTyped resourceCreate(IBaseResource resource) {
+    logger.info("resourceCreate: entered");
     return fhirClient.create().resource(resource).prefer(OPERATION_OUTCOME);
   }
 
@@ -172,10 +174,11 @@ public class FhirApi {
    * @return a Right with {@code true} if the resource exists or a Left in case of an error
    */
   public Either<String, Boolean> resourceExists(Class<? extends IBaseResource> type, String uri) {
-    logger.debug("Check whether {} with canonical URI {} exists.", type.getSimpleName(), uri);
+    logger.info("Check whether {} with canonical URI {} exists.", type.getSimpleName(), uri);
     try {
       return Either.right(resourceQuery(type, uri).execute().getTotal() == 1);
     } catch (Exception e) {
+      logger.info("Problem running check");
       return Either.left(e.getMessage());
     }
   }
@@ -268,7 +271,7 @@ public class FhirApi {
 
       defaultBbmriEricCollectionId = determineDefaultCollectionId(defaultBbmriEricCollectionId, specimensByCollection);
 
-      logger.info("__________ fetchSpecimensByCollection: defaultBbmriEricCollectionId: " + defaultBbmriEricCollectionId.toString());
+      logger.info("__________ fetchSpecimensByCollection: defaultBbmriEricCollectionId: " + defaultBbmriEricCollectionId);
 
       // Remove specimens without a collection from specimensByCollection, but keep
       // the relevant specimen list, just in case we have a valid default ID to
@@ -486,21 +489,35 @@ public class FhirApi {
      * @return the default collection id, or null if none is found
      */
   private BbmriEricId determineDefaultCollectionId(BbmriEricId defaultBbmriEricCollectionId, Map<String,List<Specimen>> specimensByCollection) {
+    logger.info("determineDefaultCollectionId: entered");
+    logger.info("determineDefaultCollectionId: initial defaultBbmriEricCollectionId: " + defaultBbmriEricCollectionId);
+
     // If no default collection ID has been provided by the site, see if we can find a plausible value.
     // If there are no specimens with a collection ID, but there is a single collection,
     // then we can reasonably assume that the collection can be used as a default.
     if (defaultBbmriEricCollectionId == null && specimensByCollection.size() == 1 && specimensByCollection.containsKey(DEFAULT_COLLECTION_ID)) {
+      logger.info("determineDefaultCollectionId: first conditional succeeded");
+
       Either<OperationOutcome, List<Organization>> collectionsOutcome = listAllCollections();
       if (collectionsOutcome.isRight()) {
+        logger.info("determineDefaultCollectionId: second conditional succeeded");
+
         List<Organization> collections = collectionsOutcome.get();
         if (collections.size() == 1) {
+          logger.info("determineDefaultCollectionId: third conditional succeeded");
+
           String defaultCollectionId = extractValidDirectoryIdentifierFromCollection(collections.get(0));
+
+          logger.info("determineDefaultCollectionId: defaultCollectionId: " + defaultCollectionId);
+
           defaultBbmriEricCollectionId = BbmriEricId
           .valueOf(defaultCollectionId)
           .orElse(null);
         }
       }
     }
+
+    logger.info("determineDefaultCollectionId: final defaultBbmriEricCollectionId: " + defaultBbmriEricCollectionId);
 
     return defaultBbmriEricCollectionId;
   }
