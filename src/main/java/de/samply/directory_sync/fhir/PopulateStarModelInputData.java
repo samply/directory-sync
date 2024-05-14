@@ -131,8 +131,11 @@ public class PopulateStarModelInputData {
       } else
         age = Integer.toString(ageInYears);
     } catch (Exception e) {
-      logger.warn(Util.traceFromException(e));
+      logger.warn("determinePatientAgeAtCollection: problem determining patient age, following exception caught: " + Util.traceFromException(e));
     }
+
+    if (age == null)
+      logger.warn("determinePatientAgeAtCollection: returning null.");
 
     return age;
   }
@@ -148,8 +151,13 @@ public class PopulateStarModelInputData {
    */
   private LocalDate extractCollectionLocalDateFromSpecimen(Specimen specimen) {
     // Check if the specimen is null or has no collection date
-    if (specimen == null || !specimen.hasCollection()) {
-      return null; // Return null if so
+    if (specimen == null) {
+      logger.warn("extractCollectionLocalDateFromSpecimen: specimen is null, returning null");
+      return null;
+    }
+    if (!specimen.hasCollection()) {
+      logger.warn("extractCollectionLocalDateFromSpecimen: specimen has no collection date, returning null");
+      return null;
     }
 
     Specimen.SpecimenCollectionComponent collection = specimen.getCollection();
@@ -159,8 +167,10 @@ public class PopulateStarModelInputData {
       LocalDate localDate = date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
 
       return localDate;
-    } else 
-        return null;
+    } else {
+      logger.warn("extractCollectionLocalDateFromSpecimen: no date/time for specimen collection, returning null");
+      return null;
+    }
   }
 
   /**

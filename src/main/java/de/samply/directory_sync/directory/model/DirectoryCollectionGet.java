@@ -23,6 +23,15 @@ import org.slf4j.LoggerFactory;
  */
 public class DirectoryCollectionGet extends HashMap {
     private static final Logger logger = LoggerFactory.getLogger(DirectoryCollectionGet.class);
+    private boolean mockDirectory = false;
+
+    public void setMockDirectory(boolean mockDirectory) {
+        this.mockDirectory = mockDirectory;
+    }
+
+    public boolean isMockDirectory() {
+        return mockDirectory;
+    }
 
     public void init() {
         put("items", new ArrayList());

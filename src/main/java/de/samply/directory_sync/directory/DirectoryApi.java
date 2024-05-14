@@ -11,21 +11,12 @@ import static org.hl7.fhir.r4.model.OperationOutcome.IssueType.NOTFOUND;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
-import de.samply.directory_sync.directory.DirectoryApi.CollectionSizeDto;
-import de.samply.directory_sync.directory.DirectoryApi.LoginCredentials;
-import de.samply.directory_sync.directory.DirectoryApi.LoginResponse;
 import de.samply.directory_sync.directory.model.BbmriEricId;
 import de.samply.directory_sync.directory.model.Biobank;
 import de.samply.directory_sync.directory.model.DirectoryCollectionGet;
 import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
-import de.samply.directory_sync.directory.model.DirectoryCollectionPut;
-import de.samply.directory_sync.fhir.FhirReporting;
 import io.vavr.control.Either;
 import java.io.IOException;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +27,6 @@ import java.util.stream.Collectors;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
@@ -59,17 +49,37 @@ public class DirectoryApi {
   private String username;
   private String password;
 
-  private DirectoryApi(CloseableHttpClient httpClient, String baseUrl, String token) {
+  // Setting this variable to true will prevent any contact being made to the Directory.
+  // All public methods will return feasible fake results.
+  private boolean mockDirectory = false;
+
+  private DirectoryApi(CloseableHttpClient httpClient, String baseUrl, String token, boolean mockDirectory) {
     this.httpClient = Objects.requireNonNull(httpClient);
     this.baseUrl = Objects.requireNonNull(baseUrl);
-    this.token = Objects.requireNonNull(token);
+    this.mockDirectory = mockDirectory;
+    if (mockDirectory)
+      // if we are mocking, then we don't need to check token, because it won't get used anyway.
+      this.token = token;
+    else
+      this.token = Objects.requireNonNull(token);
   }
 
   public static Either<OperationOutcome, DirectoryApi> createWithLogin(
-      CloseableHttpClient httpClient,
-      String baseUrl, String username, String password) {
+          CloseableHttpClient httpClient,
+          String baseUrl,
+          String username,
+          String password,
+          boolean mockDirectory) {
     return login(httpClient, baseUrl.replaceFirst("/*$", ""), username, password)
-        .map(response -> createWithToken(httpClient, baseUrl, response.token).setUsernameAndPassword(username, password));
+            .map(response -> createWithToken(httpClient, baseUrl, response.token, mockDirectory).setUsernameAndPassword(username, password));
+  }
+
+  public static Either<OperationOutcome, DirectoryApi> createWithLogin(
+          CloseableHttpClient httpClient,
+          String baseUrl,
+          String username,
+          String password) {
+    return createWithLogin(httpClient, baseUrl, username, password, false);
   }
 
   private static Either<OperationOutcome, LoginResponse> login(CloseableHttpClient httpClient,
@@ -109,6 +119,12 @@ public class DirectoryApi {
   public DirectoryApi relogin() {
     logger.info("relogin: logging back in");
     HttpPost request = loginRequest(baseUrl, username, password);
+
+    if (mockDirectory)
+      // In a mocking situation, don't try to log back in. We can safely
+      // return the old DirectoryApi object because nothing will have changed.
+      return this;
+
     String token = null;
     try (CloseableHttpResponse response = httpClient.execute(request)) {
       LoginResponse loginResponse = decodeLoginResponse(response);
@@ -122,7 +138,7 @@ public class DirectoryApi {
       return null;
     }
 
-    return new DirectoryApi(httpClient, baseUrl.replaceFirst("/*$", ""), token).setUsernameAndPassword(username, password);
+    return new DirectoryApi(httpClient, baseUrl.replaceFirst("/*$", ""), token, mockDirectory).setUsernameAndPassword(username, password);
   }
 
   private static HttpPost loginRequest(String baseUrl, String username, String password) {
@@ -144,8 +160,13 @@ public class DirectoryApi {
   }
 
   public static DirectoryApi createWithToken(CloseableHttpClient httpClient, String baseUrl,
-      String token) {
-    return new DirectoryApi(httpClient, baseUrl.replaceFirst("/*$", ""), token);
+                                             String token) {
+    return createWithToken(httpClient, baseUrl, token, false);
+  }
+
+  public static DirectoryApi createWithToken(CloseableHttpClient httpClient, String baseUrl,
+                                             String token, boolean mockDirectory) {
+    return new DirectoryApi(httpClient, baseUrl.replaceFirst("/*$", ""), token, mockDirectory);
   }
 
   private static OperationOutcome error(String action, String message) {
@@ -290,6 +311,12 @@ public class DirectoryApi {
       try {
         HttpGet request = fetchCollectionsRequest(countryCode, collectionId);
 
+        if (mockDirectory) {
+          // Dummy return if we're in mock mode
+          directoryCollectionGet.setMockDirectory(true);
+          return Either.right(directoryCollectionGet);
+        }
+
         CloseableHttpResponse response = httpClient.execute(request);
         if (response.getStatusLine().getStatusCode() < 300) {
           HttpEntity httpEntity = response.getEntity();
@@ -334,6 +361,10 @@ public class DirectoryApi {
    */
   public OperationOutcome updateEntities(DirectoryCollectionPut directoryCollectionPut) {
     HttpPut request = updateEntitiesRequest(directoryCollectionPut);
+
+    if (mockDirectory)
+      // Dummy return if we're in mock mode
+      return updateSuccessful(directoryCollectionPut.size());
 
     try (CloseableHttpResponse response = httpClient.execute(request)) {
       if (response.getStatusLine().getStatusCode() < 300) {
@@ -389,6 +420,10 @@ public class DirectoryApi {
       // Now push the new data
       HttpPost request = updateStarModelRequestBlock(countryCode, factTablesBlock);
 
+      if (mockDirectory)
+        // Dummy return if we're in mock mode
+        return updateSuccessful(starModelInputData.getFactCount());
+
       try (CloseableHttpResponse response = httpClient.execute(request)) {
         if (response.getStatusLine().getStatusCode() >= 300)
           return error("entity update status code " + response.getStatusLine().getStatusCode(), EntityUtils.toString(response.getEntity(), UTF_8));
@@ -428,6 +463,10 @@ public class DirectoryApi {
    */
   private OperationOutcome deleteStarModel(StarModelData starModelInputData) {
     String apiUrl = buildApiUrl(starModelInputData.getCountryCode(), "facts");
+
+    if (mockDirectory)
+      // Dummy return if we're in mock mode
+      return new OperationOutcome();
 
     try {
       for (String collectionId: starModelInputData.getInputCollectionIds()) {

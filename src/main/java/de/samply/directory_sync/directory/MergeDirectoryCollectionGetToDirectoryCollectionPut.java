@@ -31,9 +31,11 @@ public class MergeDirectoryCollectionGetToDirectoryCollectionPut {
    */
   public static boolean merge(DirectoryCollectionGet directoryCollectionGet, DirectoryCollectionPut directoryCollectionPut) {
     List<String> collectionIds = directoryCollectionPut.getCollectionIds();
-    for (String collectionId: collectionIds)
-        if (merge(collectionId, directoryCollectionGet, directoryCollectionPut) == null)
-          return false;
+    // Only do a merge if we are not mocking
+    if (!directoryCollectionGet.isMockDirectory())
+      for (String collectionId: collectionIds)
+          if (merge(collectionId, directoryCollectionGet, directoryCollectionPut) == null)
+            return false;
     
     return true;
   }

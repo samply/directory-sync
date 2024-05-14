@@ -163,8 +163,10 @@ public class StarModelData {
          * @param age The age at primary diagnosis to be associated with the input row.
          */
         public void setAgeAtPrimaryDiagnosis(String age) {
-            if (age == null)
+            if (age == null) {
+                logger.warn("setAgeAtPrimaryDiagnosis: age is null, ignoring.");
                 return;
+            }
             put("age_at_primary_diagnosis", age);
         }
     }
