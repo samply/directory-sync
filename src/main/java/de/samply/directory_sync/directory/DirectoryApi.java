@@ -70,21 +70,16 @@ public class DirectoryApi {
           String username,
           String password,
           boolean mockDirectory) {
-    return login(httpClient, baseUrl.replaceFirst("/*$", ""), username, password)
+    return login(httpClient, baseUrl.replaceFirst("/*$", ""), username, password, mockDirectory)
             .map(response -> createWithToken(httpClient, baseUrl, response.token, mockDirectory).setUsernameAndPassword(username, password));
-  }
-
-  public static Either<OperationOutcome, DirectoryApi> createWithLogin(
-          CloseableHttpClient httpClient,
-          String baseUrl,
-          String username,
-          String password) {
-    return createWithLogin(httpClient, baseUrl, username, password, false);
   }
 
   private static Either<OperationOutcome, LoginResponse> login(CloseableHttpClient httpClient,
       String baseUrl,
-      String username, String password) {
+      String username, String password, boolean mockDirectory) {
+    if (mockDirectory)
+      // Don't try logging in if we are mocking
+      return Either.right(new LoginResponse());
     HttpPost request = loginRequest(baseUrl, username, password);
     try (CloseableHttpResponse response = httpClient.execute(request)) {
       return Either.right(decodeLoginResponse(response));
